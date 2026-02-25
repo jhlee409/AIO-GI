@@ -1,0 +1,51 @@
+# Cloud Build: 빌드 후 Cloud Run 배포 (로컬 Docker 불필요)
+substitutions:
+  _SERVICE_NAME: emt-video-analysis
+  _REGION: asia-northeast3
+  _PROJECT_ID: amcgi-bulletin
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/${_PROJECT_ID}/${_SERVICE_NAME}:${BUILD_ID}'
+      - '-t'
+      - 'gcr.io/${_PROJECT_ID}/${_SERVICE_NAME}:latest'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/${_PROJECT_ID}/${_SERVICE_NAME}:${BUILD_ID}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image'
+      - 'gcr.io/${_PROJECT_ID}/${_SERVICE_NAME}:${BUILD_ID}'
+      - '--platform'
+      - 'managed'
+      - '--region'
+      - '${_REGION}'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '300'
+      - '--max-instances'
+      - '10'
+      - '--project'
+      - '${_PROJECT_ID}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/${_PROJECT_ID}/${_SERVICE_NAME}:${BUILD_ID}'
+  - 'gcr.io/${_PROJECT_ID}/${_SERVICE_NAME}:latest'
