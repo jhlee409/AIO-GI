@@ -401,10 +401,10 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
         const instructors = await findAllInstructorsByHospital(hospital);
         console.timeEnd(`[emt-processor:${jobId}] Instructor lookup`);
 
-        // 3.5. EMT-L 불합격 시 Firebase에서 동영상 삭제
-        if (version === 'EMT-L' && !analysisPassed && videoPath) {
+        // 3.5. EMT/EMT-L 불합격 시 Firebase에서 동영상 삭제
+        if (!analysisPassed && videoPath) {
             await updateJobProgress(jobId, 88, '불합격 동영상 삭제 중...');
-            console.log(`[emt-processor:${jobId}] EMT-L failed: Deleting video from Firebase Storage`, { videoPath });
+            console.log(`[emt-processor:${jobId}] ${version} failed: Deleting video from Firebase Storage`, { videoPath });
             try {
                 const videoFileRef = bucket.file(videoPath);
                 const [exists] = await videoFileRef.exists();
