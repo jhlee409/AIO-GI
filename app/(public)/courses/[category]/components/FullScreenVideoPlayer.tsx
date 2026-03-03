@@ -64,6 +64,7 @@ const FullScreenVideoPlayer = forwardRef<FullScreenVideoPlayerRef, FullScreenVid
                 onClick={handleClose}
                 className="absolute top-4 right-4 z-50 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-colors"
                 aria-label="닫기"
+                title="닫기"
             >
                 <X className="w-6 h-6 text-gray-800" />
             </button>

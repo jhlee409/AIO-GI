@@ -12,7 +12,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { Play, Pause, Square } from 'lucide-react';
+import { Play, Pause, Square, Maximize2, Minimize2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { useVideoWatchTime } from '@/lib/hooks/useVideoWatchTime';
 
 export interface CustomVideoPlayerRef {
@@ -48,7 +48,9 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     onThresholdReached
 }, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -437,6 +439,16 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         setCurrentTime(newTime);
     };
 
+    const handleSeek = (seconds: number) => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const maxTime = isNaN(video.duration) || !isFinite(video.duration) ? Infinity : video.duration;
+        const newTime = Math.max(0, Math.min(maxTime, video.currentTime + seconds));
+        video.currentTime = newTime;
+        setCurrentTime(newTime);
+    };
+
     const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newVolume = parseFloat(e.target.value);
         setVolume(newVolume);
@@ -455,12 +467,36 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
 
     const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+    const handleFullscreenToggle = async () => {
+        if (!containerRef.current) return;
+        try {
+            if (isFullscreen) {
+                await document.exitFullscreen();
+            } else {
+                await containerRef.current.requestFullscreen();
+            }
+        } catch (err) {
+            console.error('Fullscreen error:', err);
+        }
+    };
+
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, []);
+
     return (
-        <div className="bg-black rounded-lg overflow-hidden h-full flex flex-col">
+        <div 
+            ref={containerRef} 
+            className={`bg-black overflow-hidden h-full flex flex-col ${isFullscreen ? 'min-h-screen rounded-none' : 'rounded-lg'}`}
+        >
             {/* Video Element */}
             <div 
-                className="flex items-center justify-center bg-black overflow-hidden" 
-                style={{ height: '900px' }}
+                className={`flex items-center justify-center bg-black overflow-hidden ${isFullscreen ? 'flex-1 min-h-0' : ''}`}
+                style={isFullscreen ? undefined : { height: '900px' }}
                 onMouseLeave={() => {
                     // 마우스가 영역 밖으로 나가도 재생 유지
                     const video = videoRef.current;
@@ -473,11 +509,11 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 <video
                     ref={videoRef}
                     src={videoUrl}
-                    className="object-contain"
+                    className={`object-contain ${isFullscreen ? 'w-full h-full max-w-full max-h-full' : ''}`}
                     preload="auto"
                     playsInline
                     onClick={handleVideoClick}
-                    style={{ 
+                    style={isFullscreen ? undefined : { 
                         maxWidth: '100%', 
                         maxHeight: '100%', 
                         width: 'auto', 
@@ -499,6 +535,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                         value={progressPercentage}
                         onChange={handleProgressChange}
                         className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                        title="재생 위치"
                         style={{
                             background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${progressPercentage}%, #374151 ${progressPercentage}%, #374151 100%)`
                         }}
@@ -514,9 +551,26 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                     {/* Control Buttons */}
                     <div className="flex items-center space-x-3">
                         <button
+                            onClick={() => handleSeek(-10)}
+                            className="flex items-center justify-center w-9 h-9 bg-gray-700 text-white rounded-full hover:bg-gray-600 transition"
+                            aria-label="10초 뒤로"
+                            title="10초 뒤로"
+                        >
+                            <ChevronsLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => handleSeek(-5)}
+                            className="flex items-center justify-center w-9 h-9 bg-gray-700 text-white rounded-full hover:bg-gray-600 transition"
+                            aria-label="5초 뒤로"
+                            title="5초 뒤로"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
                             onClick={handlePlayPause}
                             className="flex items-center justify-center w-9 h-9 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition"
-                            aria-label={isPlaying ? 'Pause' : 'Play'}
+                            aria-label={isPlaying ? '일시정지' : '재생'}
+                            title={isPlaying ? '일시정지' : '재생'}
                         >
                             {isPlaying ? (
                                 <Pause className="w-4 h-4" />
@@ -525,16 +579,45 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                             )}
                         </button>
                         <button
+                            onClick={() => handleSeek(5)}
+                            className="flex items-center justify-center w-9 h-9 bg-gray-700 text-white rounded-full hover:bg-gray-600 transition"
+                            aria-label="5초 앞으로"
+                            title="5초 앞으로"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => handleSeek(10)}
+                            className="flex items-center justify-center w-9 h-9 bg-gray-700 text-white rounded-full hover:bg-gray-600 transition"
+                            aria-label="10초 앞으로"
+                            title="10초 앞으로"
+                        >
+                            <ChevronsRight className="w-4 h-4" />
+                        </button>
+                        <button
                             onClick={handleStop}
                             className="flex items-center justify-center w-9 h-9 bg-gray-700 text-white rounded-full hover:bg-gray-600 transition"
-                            aria-label="Stop"
+                            aria-label="정지"
+                            title="정지"
                         >
                             <Square className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                            onClick={handleFullscreenToggle}
+                            className="flex items-center justify-center w-9 h-9 bg-gray-700 text-white rounded-full hover:bg-gray-600 transition"
+                            aria-label={isFullscreen ? '전체 화면 해제' : '전체 화면'}
+                            title={isFullscreen ? '전체 화면 해제' : '전체 화면'}
+                        >
+                            {isFullscreen ? (
+                                <Minimize2 className="w-4 h-4" />
+                            ) : (
+                                <Maximize2 className="w-4 h-4" />
+                            )}
                         </button>
                     </div>
 
                     {/* Volume Control */}
-                    <div className="flex items-center space-x-2 text-xs text-gray-300">
+                    <div className="flex items-center space-x-2 text-xs text-gray-300" title="볼륨 조절">
                         <span className="whitespace-nowrap">볼륨</span>
                         <input
                             type="range"
@@ -544,6 +627,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                             value={volume}
                             onChange={handleVolumeChange}
                             className="w-32 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                            title="볼륨 조절"
                         />
                     </div>
                 </div>
