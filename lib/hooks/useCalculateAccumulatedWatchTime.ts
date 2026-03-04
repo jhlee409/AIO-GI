@@ -10,6 +10,8 @@ export interface AccumulatedWatchTime {
     duration: number;
     category?: string;
     videoUrl?: string;
+    /** 가장 최근 시청 기록의 lastUpdated (24시간 이내 변경 감지용) */
+    lastUpdated?: Date;
 }
 
 export async function calculateAccumulatedWatchTime(
@@ -62,6 +64,7 @@ export async function calculateAccumulatedWatchTime(
                     duration: number;
                     category?: string;
                     videoUrl?: string;
+                    lastUpdated?: Date;
                 }>>();
 
                 console.log(`[calculateAccumulatedWatchTime] Processing ${userWatchTimeQuery.docs.length} records for ${email}`);
@@ -137,6 +140,9 @@ export async function calculateAccumulatedWatchTime(
                         
                         console.log(`[calculateAccumulatedWatchTime] Generated keys for record (videoTitle: "${videoTitle}", category: "${watchCategory}"):`, keys);
 
+                        const lastUpdatedRaw = data.lastUpdated;
+                        const lastUpdated = lastUpdatedRaw?.toDate?.() ?? (lastUpdatedRaw instanceof Date ? lastUpdatedRaw : undefined);
+
                         keys.forEach(key => {
                             if (!recordsByKey.has(key)) {
                                 recordsByKey.set(key, []);
@@ -145,7 +151,8 @@ export async function calculateAccumulatedWatchTime(
                                 watchedTime,
                                 duration,
                                 category: watchCategory,
-                                videoUrl
+                                videoUrl,
+                                lastUpdated
                             });
                         });
                     }
@@ -155,11 +162,15 @@ export async function calculateAccumulatedWatchTime(
                     if (records.length > 0) {
                         const duration = records[0].duration;
                         let totalPercentage = 0;
+                        let maxLastUpdated: Date | undefined;
 
                         records.forEach(record => {
                             if (record.duration > 0) {
                                 const sessionPercentage = (record.watchedTime / record.duration) * 100;
                                 totalPercentage += sessionPercentage;
+                            }
+                            if (record.lastUpdated && (!maxLastUpdated || record.lastUpdated > maxLastUpdated)) {
+                                maxLastUpdated = record.lastUpdated;
                             }
                         });
 
@@ -172,7 +183,8 @@ export async function calculateAccumulatedWatchTime(
                             totalPercentage,
                             duration,
                             category: records[0].category,
-                            videoUrl: records[0].videoUrl
+                            videoUrl: records[0].videoUrl,
+                            lastUpdated: maxLastUpdated
                         });
                     }
                 });

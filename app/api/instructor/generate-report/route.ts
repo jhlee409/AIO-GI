@@ -243,39 +243,61 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 3. Get log file names from Firebase Storage (both folders)
+        // 3. Get log file names and metadata (timeCreated) from Firebase Storage (both folders)
         let regularLogFileNames: string[] = [];
         let egdLogFileNames: string[] = [];
+        const regularLogFileMeta = new Map<string, Date>(); // fileName -> timeCreated (24시간 이내 변경 감지용)
+        const egdLogFileMeta = new Map<string, Date>();
         let bucket;
+
+        const HOURS_24_MS = 24 * 60 * 60 * 1000;
 
         try {
             const adminStorage = getAdminStorage();
             bucket = adminStorage.bucket();
 
+            const fetchFileMeta = async (files: Array<{ name: string; getMetadata: () => Promise<unknown> }>) => {
+                const results = await Promise.allSettled(files.map(f => f.getMetadata()));
+                const metaMap = new Map<string, Date>();
+                const names: string[] = [];
+                files.forEach((file, i) => {
+                    const fileName = file.name.split('/').pop() || file.name;
+                    if (!fileName) return;
+                    names.push(fileName);
+                    const result = results[i];
+                    if (result.status === 'fulfilled') {
+                        const res = result.value as [unknown] | unknown;
+                        const metadata = Array.isArray(res) ? res[0] : (res as { timeCreated?: string });
+                        const timeCreated = (metadata as { timeCreated?: string })?.timeCreated;
+                        if (timeCreated) {
+                            metaMap.set(fileName, new Date(timeCreated));
+                        }
+                    }
+                });
+                return { names, metaMap };
+            };
+
             // Get files from regular log folder
             try {
                 const [regularFiles] = await bucket.getFiles({ prefix: 'log/' });
-                regularLogFileNames = regularFiles
-                    .map(file => file.name.split('/').pop() || file.name)
-                    .filter(fileName => fileName && fileName.length > 0);
+                const { names, metaMap } = await fetchFileMeta(regularFiles as Array<{ name: string; getMetadata: () => Promise<unknown> }>);
+                regularLogFileNames = names.filter(n => n && n.length > 0);
+                metaMap.forEach((v, k) => regularLogFileMeta.set(k, v));
             } catch (regularError: any) {
                 console.error('Error getting regular log files:', regularError);
-                // Continue with empty array
             }
 
             // Get files from EGD Lesion Dx log folder
             try {
                 const [egdFiles] = await bucket.getFiles({ prefix: 'log_EGD_Lesion_Dx/' });
-                egdLogFileNames = egdFiles
-                    .map(file => file.name.split('/').pop() || file.name)
-                    .filter(fileName => fileName && fileName.length > 0);
+                const { names, metaMap } = await fetchFileMeta(egdFiles as Array<{ name: string; getMetadata: () => Promise<unknown> }>);
+                egdLogFileNames = names.filter(n => n && n.length > 0);
+                metaMap.forEach((v, k) => egdLogFileMeta.set(k, v));
             } catch (egdError: any) {
                 console.error('Error getting EGD log files:', egdError);
-                // Continue with empty array
             }
         } catch (storageError: any) {
             console.error('Error accessing Firebase Storage:', storageError);
-            // Continue with empty arrays - will result in all "no" or "0" values
         }
 
         // 4. Read template Excel file
@@ -412,6 +434,11 @@ export async function POST(request: NextRequest) {
         });
 
         // 7. Fill completion data
+        const recentlyChangedCells: [number, number][] = [];
+        const now = Date.now();
+
+        const isWithin24Hours = (d: Date | undefined) =>
+            d && (now - d.getTime()) < HOURS_24_MS;
 
         for (let row = 2; row < newData.length; row++) {
             const category = String(newData[row][0] || '').trim(); // A column (category)
@@ -508,8 +535,9 @@ export async function POST(request: NextRequest) {
                 console.log(`Category: "${category}" -> Normalized: "${categoryNormalized}" -> isEGDLesionDxRow: ${isEGDLesionDxRow}`);
             }
 
-            // Select appropriate log file list based on category
+            // Select appropriate log file list and meta based on category
             const logFileNames = isEGDLesionDxRow ? egdLogFileNames : regularLogFileNames;
+            const logFileMeta = isEGDLesionDxRow ? egdLogFileMeta : regularLogFileMeta;
 
             for (let col = 2; col < newData[1].length; col++) {
                 // Only process if we have a user in this column
@@ -589,10 +617,15 @@ export async function POST(request: NextRequest) {
                         // 코드 형식이 아닌 경우: 기존 로직 사용
                         return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
                     });
-                    newData[row][col] = matchingFiles.length > 0 ? matchingFiles.length.toString() : '0';
+                    const cellVal = matchingFiles.length > 0 ? matchingFiles.length.toString() : '0';
+                    newData[row][col] = cellVal;
+                    if (parseInt(cellVal, 10) > 0) {
+                        const anyRecent = matchingFiles.some(fn => isWithin24Hours(logFileMeta.get(fn)));
+                        if (anyRecent) recentlyChangedCells.push([row, col]);
+                    }
                 } else {
                     // For other categories: use yes/no, or percentage if no completion
-                    const hasCompletion = logFileNames.some(fileName => {
+                    const matchingFilesForYes = logFileNames.filter(fileName => {
                         const fileNameLower = fileName.toLowerCase();
                         const lectureLower = lectureTitle.toLowerCase();
                         const userLower = userName.toLowerCase();
@@ -666,6 +699,7 @@ export async function POST(request: NextRequest) {
                         // 코드 형식이 아닌 경우: 기존 로직 사용
                         return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
                     });
+                    const hasCompletion = matchingFilesForYes.length > 0;
 
                     // 'Dx EGD 실전 강의' 카테고리인 경우: 시청 시간 데이터 확인 후 누적 % 표시
                     // 강제 인식된 경우도 포함
@@ -763,12 +797,18 @@ export async function POST(request: NextRequest) {
                                 const totalPercentage = (matchedWatchTime as any).totalPercentage || 0;
                                 console.log(`[Dx EGD 실전 강의 매칭] Final match: Key="${matchedKey}", Percentage=${totalPercentage}%`);
                                 newData[row][col] = `${Math.round(totalPercentage)}%`;
+                                if (isWithin24Hours((matchedWatchTime as any).lastUpdated)) {
+                                    recentlyChangedCells.push([row, col]);
+                                }
                             } else {
                                 // 시청 시간 데이터가 없으면 로그 파일 확인
                                 if (hasCompletion) {
                                     // 로그 파일이 있으면 "yes" 표시
                                     console.log(`[Dx EGD 실전 강의 매칭] No watch time data but log file exists, showing "yes"`);
                                     newData[row][col] = 'yes';
+                                    if (matchingFilesForYes.some(fn => isWithin24Hours(logFileMeta.get(fn)))) {
+                                        recentlyChangedCells.push([row, col]);
+                                    }
                                 } else {
                                     // 로그 파일도 없으면 "no" 표시
                                     console.log(`[Dx EGD 실전 강의 매칭] No watch time data and no log file, showing "no"`);
@@ -786,6 +826,9 @@ export async function POST(request: NextRequest) {
                                 // 로그 파일이 있으면 "yes" 표시
                                 console.log(`[Dx EGD 실전 강의 매칭] No watch time data for user: ${userEmail}, but log file exists, showing "yes"`);
                                 newData[row][col] = 'yes';
+                                if (matchingFilesForYes.some(fn => isWithin24Hours(logFileMeta.get(fn)))) {
+                                    recentlyChangedCells.push([row, col]);
+                                }
                             } else {
                                 // 로그 파일도 없으면 "no" 표시
                                 console.log(`[Dx EGD 실전 강의 매칭] No watch time data and no log file for user: ${userEmail}, showing "no"`);
@@ -796,6 +839,9 @@ export async function POST(request: NextRequest) {
                         // 다른 카테고리: 로그 파일이 있으면 "yes", 없으면 "no"
                         if (hasCompletion) {
                             newData[row][col] = 'yes';
+                            if (matchingFilesForYes.some(fn => isWithin24Hours(logFileMeta.get(fn)))) {
+                                recentlyChangedCells.push([row, col]);
+                            }
                         } else {
                             newData[row][col] = 'no';
                         }
@@ -807,7 +853,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             message: '레포트 작성이 완료되었습니다.',
-            tableData: newData
+            tableData: newData,
+            recentlyChangedCells
         });
 
     } catch (error: any) {

@@ -275,7 +275,8 @@ export default function InstructorPage() {
         setReportMessage(null);
     };
 
-    const buildReportTableHTML = useCallback((data: any[][]) => {
+    const buildReportTableHTML = useCallback((data: any[][], recentlyChangedCells?: [number, number][]) => {
+        const recentlySet = new Set(recentlyChangedCells?.map(([r, c]) => `${r},${c}`) ?? []);
         let html = '<table style="border-collapse:collapse;table-layout:auto;width:max-content;min-width:100%">';
         // thead
         html += '<thead style="position:sticky;top:0;background:#f3f4f6;z-index:10">';
@@ -292,7 +293,8 @@ export default function InstructorPage() {
         }
         html += '</thead><tbody>';
         // tbody
-        data.slice(2).forEach((row: any[]) => {
+        data.slice(2).forEach((row: any[], rowIndex: number) => {
+            const actualRow = 2 + rowIndex;
             html += '<tr>';
             row.forEach((cell: any, ci: number) => {
                 const v = cell || '';
@@ -304,7 +306,20 @@ export default function InstructorPage() {
                     if (v === 'yes' || (typeof v === 'string' && /^\d+$/.test(v) && parseInt(v, 10) > 0)) {
                         bg = '#bbf7d0'; style += 'font-weight:500;';
                     } else if (v === 'no') { style += 'font-weight:500;'; }
-                    if (typeof v === 'string' && v.endsWith('%')) { const n = parseInt(v); if (n > 0) { bg = '#bbf7d0'; style += 'font-weight:500;'; } }
+                    if (typeof v === 'string' && v.endsWith('%')) {
+                        const n = parseInt(v);
+                        style += 'font-weight:500;';
+                        if (recentlySet.has(`${actualRow},${ci}`)) {
+                            bg = '#fef08a'; // 24시간 이내 변경: 노란색
+                        } else if (n >= 80) {
+                            bg = '#bbf7d0'; // 80% 이상: 연두색
+                        }
+                        // 80% 미만: bg 없음
+                    }
+                    // 24시간 이내 변경된 셀(yes, 숫자)은 노란색
+                    if (bg && recentlySet.has(`${actualRow},${ci}`) && !(typeof v === 'string' && v.endsWith('%'))) {
+                        bg = '#fef08a';
+                    }
                 }
                 if (bg) style += `background:${bg};`;
                 html += `<td style="${style}">${v}</td>`;
@@ -315,7 +330,7 @@ export default function InstructorPage() {
         return html;
     }, []);
 
-    const openReportInNewWindow = useCallback((data: any[][]) => {
+    const openReportInNewWindow = useCallback((data: any[][], recentlyChangedCells?: [number, number][]) => {
         if (!data || data.length === 0) return;
         if (reportWindowRef.current && !reportWindowRef.current.closed) {
             reportWindowRef.current.close();
@@ -382,7 +397,7 @@ export default function InstructorPage() {
                 `report_${hospitalStr}_${positionStr}_${dateStr}.csv`
             );
         };
-        const tableHTML = buildReportTableHTML(data);
+        const tableHTML = buildReportTableHTML(data, recentlyChangedCells);
         w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>레포트 결과</title>
 <style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f9fafb;}
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
@@ -479,8 +494,8 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
             if (data.success && data.tableData) {
                 setReportData(data.tableData);
                 setReportMessage({ type: 'success', text: data.message || '레포트 작성이 완료되었습니다.' });
-                // 새창에서 레포트 열기
-                openReportInNewWindow(data.tableData);
+                // 새창에서 레포트 열기 (24시간 이내 변경 셀은 노란색으로 표시)
+                openReportInNewWindow(data.tableData, data.recentlyChangedCells);
             } else {
                 throw new Error(data.error || data.message || '레포트 작성 중 오류가 발생했습니다.');
             }
