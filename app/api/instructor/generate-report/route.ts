@@ -211,6 +211,22 @@ export async function POST(request: NextRequest) {
             }
         });
 
+        // Stent Eso GE junction: Advanced course for F2에 포함되어 있으면 lecture_list에 없어도 추가
+        const hasAdvancedF2 = normalizedCategories.some((c: string) =>
+            c.includes('advanced course for f2') || c === 'advanced'
+        );
+        const hasStentEsoGeJunction = lectures.some((l: { title: string }) =>
+            l.title.toLowerCase().includes('stent_eso_gejunction')
+        );
+        if (hasAdvancedF2 && !hasStentEsoGeJunction) {
+            lectures.push({
+                category: 'Advanced course for F2',
+                title: 'Stent_Eso_GEjunction',
+                isVideo: true
+            });
+            console.log('[Report Generation] Added Stent_Eso_GEjunction to Advanced course for F2');
+        }
+
         // EGD variation: keep only the first code per letter group (e.g. A1, B1, C1 — exclude A2, A3, B2, etc.)
         const seenLetters = new Set<string>();
         const filteredLectures = lectures.filter(lecture => {

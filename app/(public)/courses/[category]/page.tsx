@@ -224,6 +224,13 @@ export default function CoursePage() {
     const [selectedDiagnosticEus, setSelectedDiagnosticEus] = useState<string | null>(null);
     const [diagnosticEusLogCreated, setDiagnosticEusLogCreated] = useState<Set<string>>(new Set());
 
+    // Stent Eso GE junction video states
+    const [stentEsoGeJunctionVideoUrl, setStentEsoGeJunctionVideoUrl] = useState<string | null>(null);
+    const [loadingStentEsoGeJunction, setLoadingStentEsoGeJunction] = useState(false);
+    const [stentEsoGeJunctionError, setStentEsoGeJunctionError] = useState<string | null>(null);
+    const [showStentEsoGeJunction, setShowStentEsoGeJunction] = useState(false);
+    const [stentEsoGeJunctionLogCreated, setStentEsoGeJunctionLogCreated] = useState(false);
+
     // EGD lesion Dx images states
     const [egdDxImages, setEgdDxImages] = useState<string[]>([]);
     const [loadingEgdDxImages, setLoadingEgdDxImages] = useState(false);
@@ -354,6 +361,7 @@ export default function CoursePage() {
     const nvugibOverviewPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const nvugibCasePlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const diagnosticEusPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
+    const stentEsoGeJunctionPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
 
     // 현재 열려있는 비디오 플레이어의 시청 시간 저장 함수
     const saveCurrentVideoWatchTime = React.useCallback(async () => {
@@ -419,6 +427,9 @@ export default function CoursePage() {
         if (showDiagnosticEus && diagnosticEusPlayerRef.current) {
             savePromises.push(diagnosticEusPlayerRef.current.saveWatchTime());
         }
+        if (showStentEsoGeJunction && stentEsoGeJunctionPlayerRef.current) {
+            savePromises.push(stentEsoGeJunctionPlayerRef.current.saveWatchTime());
+        }
 
         // 모든 저장 작업이 완료될 때까지 대기
         await Promise.all(savePromises);
@@ -427,7 +438,7 @@ export default function CoursePage() {
         showLhtOrientation, showLhtExpertDemo, showEmtOrientation, showEmtExemplary,
         showDxEgdLecture, showOtherLecture, showEgdVariation, showHemoclip,
         showInjection, showApc, showNexpowder, showEvl, showPeg,
-        showNvugibOverview, showNvugibCase, showDiagnosticEus
+        showNvugibOverview, showNvugibCase, showDiagnosticEus, showStentEsoGeJunction
     ]);
 
     // PBL F2 03 states
@@ -2083,6 +2094,11 @@ export default function CoursePage() {
                                                             setShowHemoclip(false);
                                                             setHemoclipVideoUrl(null);
                                                             setHemoclipLogCreated(false);
+                                                            setShowDiagnosticEus(false);
+                                                            setDiagnosticEusVideoUrl(null);
+                                                            setSelectedDiagnosticEus(null);
+                                                            setShowStentEsoGeJunction(false);
+                                                            setStentEsoGeJunctionVideoUrl(null);
 
                                                             setSelectedItem(item.id);
                                                         }}
@@ -2200,6 +2216,8 @@ export default function CoursePage() {
                                             setShowDiagnosticEus(false);
                                             setDiagnosticEusVideoUrl(null);
                                             setSelectedDiagnosticEus(null);
+                                            setShowStentEsoGeJunction(false);
+                                            setStentEsoGeJunctionVideoUrl(null);
                                         }}
                                         className={`w-full text-left py-3 rounded-lg transition ${selectedItem === null
                                             ? 'bg-gray-200 text-gray-800 font-semibold'
@@ -6057,6 +6075,112 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 </div>
                                             </div>
                                         </div>
+                                    ) : category === 'advanced' && selectedItem === 'stent-eso-ge-junction' ? (
+                                        // Stent Eso GE junction: 동영상 플레이어 (새 창)
+                                        showStentEsoGeJunction && stentEsoGeJunctionVideoUrl ? (
+                                            <FullScreenVideoPlayer
+                                                ref={stentEsoGeJunctionPlayerRef}
+                                                isOpen={showStentEsoGeJunction}
+                                                videoUrl={stentEsoGeJunctionVideoUrl}
+                                                userEmail={user?.email || null}
+                                                userPosition={userProfile?.position}
+                                                userName={userProfile?.name}
+                                                userHospital={userProfile?.hospital}
+                                                videoTitle="Stent_Eso_GEjunction"
+                                                category="Advanced course for F2"
+                                                onPlay={async () => {
+                                                    if (userProfile && !stentEsoGeJunctionLogCreated) {
+                                                        try {
+                                                            const logFileName = `${userProfile.position}-${userProfile.name}-Stent_Eso_GEjunction`;
+                                                            const logContent = `Position: ${userProfile.position}
+Name: ${userProfile.name}
+Hospital: ${userProfile.hospital}
+Email: ${user?.email || ''}
+Category: Advanced course for F2
+Section: Stent Eso GE junction
+Lecture Title: Stent_Eso_GEjunction
+Action: Video Play
+Timestamp: ${new Date().toISOString()}
+Date: ${new Date().toLocaleString('ko-KR')}`;
+
+                                                            const response = await fetch('/api/log/create', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ fileName: logFileName, content: logContent }),
+                                                            });
+                                                            if (response.ok) {
+                                                                setStentEsoGeJunctionLogCreated(true);
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Error creating log file:', error);
+                                                        }
+                                                    }
+                                                }}
+                                                onClose={() => {
+                                                    setShowStentEsoGeJunction(false);
+                                                    setStentEsoGeJunctionVideoUrl(null);
+                                                    setStentEsoGeJunctionError(null);
+                                                }}
+                                                onEnded={() => {
+                                                    setShowStentEsoGeJunction(false);
+                                                    setStentEsoGeJunctionVideoUrl(null);
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="flex flex-col h-full overflow-y-auto">
+                                                <div className="mb-6">
+                                                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                                                        {selectedContent?.title}
+                                                    </h1>
+                                                    <p className="text-lg text-gray-700">
+                                                        {selectedContent?.content}
+                                                    </p>
+                                                </div>
+                                                <div className="border-t border-gray-300 mb-6"></div>
+                                                <div className="mb-8">
+                                                    <ActionButton
+                                                        onClick={async () => {
+                                                            if (!checkAuth()) return;
+                                                            setLoadingStentEsoGeJunction(true);
+                                                            setStentEsoGeJunctionError(null);
+                                                            setStentEsoGeJunctionLogCreated(false);
+                                                            try {
+                                                                const response = await fetch(
+                                                                    `/api/video-url?path=${encodeURIComponent('Simulator_training/Stent/Stent_Eso_GEjunction_lecture.mp4')}`
+                                                                );
+                                                                if (!response.ok) {
+                                                                    const errorData = await response.json().catch(() => ({ error: '동영상을 불러오는 중 오류가 발생했습니다.' }));
+                                                                    throw new Error(errorData.error || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                                }
+                                                                const data = await response.json();
+                                                                setStentEsoGeJunctionVideoUrl(data.url);
+                                                                setShowStentEsoGeJunction(true);
+                                                            } catch (error: any) {
+                                                                setStentEsoGeJunctionError(error.message || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                            } finally {
+                                                                setLoadingStentEsoGeJunction(false);
+                                                            }
+                                                        }}
+                                                        disabled={loadingStentEsoGeJunction}
+                                                        loading={loadingStentEsoGeJunction}
+                                                        icon={Video}
+                                                        loadingText="동영상 불러오는 중..."
+                                                    >
+                                                        동영상 시청
+                                                    </ActionButton>
+                                                    {stentEsoGeJunctionError && (
+                                                        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
+                                                            {stentEsoGeJunctionError}
+                                                        </div>
+                                                    )}
+                                                    {loadingStentEsoGeJunction && !stentEsoGeJunctionError && (
+                                                        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-600">
+                                                            동영상을 불러오는 중...
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
                                     ) : category === 'pbl' && selectedItem ? (
                                         // PBL: 카드 형식으로 표시
                                         <div className="flex flex-col h-full overflow-y-auto">
@@ -6279,7 +6403,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                 </div>
                             ) : (
                                 <div className="py-8">
-                                    {category === 'basic' || category === 'advanced-f1' ? (
+                                    {category === 'basic' || category === 'advanced-f1' || category === 'advanced' ? (
                                         <div>
                                             <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">
                                                 {course.name}

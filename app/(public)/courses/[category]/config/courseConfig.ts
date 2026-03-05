@@ -147,6 +147,11 @@ export const courseConfig: Record<string, {
                 title: '3. Problem-Based Learning (PBL) for F2',
                 content: '상부위장관 질환 case 중에서 난이도가 높은 상황을 선택하여 증례로 구성해서 문제를 풀어가는 훈련 과정입니다.',
             },
+            {
+                id: 'stent-eso-ge-junction',
+                title: '4. Stent Eso GE junction',
+                content: '식도-위장 접합부 스텐트 시술에 대한 교육 콘텐츠입니다.',
+            },
         ],
     },
     pbl: {
