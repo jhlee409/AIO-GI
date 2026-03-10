@@ -72,7 +72,13 @@ export default function AdminUserTable({ users, onUsersChange, currentUserEmail 
 
     // Get all column names from the first user object, excluding internal fields
     // Handle empty users array
-    const columns = users.length > 0 ? Object.keys(users[0]).filter(key => key !== '_id' && key !== 'createdAt' && key !== '중도퇴사' && key !== '중도 퇴사' && key !== '원외출신' && key !== '원외 출신') : [];
+    // Merge keys from all users to include columns that might only exist in some rows (e.g. 3월 근무)
+    const allKeys = users.length > 0
+        ? [...new Set(users.flatMap(u => Object.keys(u)))]
+        : [];
+    const baseColumns = allKeys.filter(key => key !== '_id' && key !== 'createdAt' && key !== '중도퇴사' && key !== '중도 퇴사' && key !== '원외출신' && key !== '원외 출신');
+    // 중복 컬럼 제거 (첫 번째만 유지)
+    const columns = baseColumns.filter((col, i, arr) => arr.indexOf(col) === i);
 
     // Find field names
     const hospitalFieldName = columns.find(col => col === '병원' || col === '병원명') || null;

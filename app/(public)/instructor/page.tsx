@@ -29,6 +29,7 @@ export default function InstructorPage() {
     const [reportData, setReportData] = useState<any[][] | null>(null);
     const [reportMessage, setReportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [userHospital, setUserHospital] = useState<string>('');
+    const [userProfileLoaded, setUserProfileLoaded] = useState(false);
     const isAdmin = role === 'admin';
     const reportWindowRef = useRef<Window | null>(null);
 
@@ -76,7 +77,10 @@ export default function InstructorPage() {
     // Load user profile (hospital information) - 관리자도 포함
     useEffect(() => {
         const loadUserProfile = async () => {
-            if (!user?.email) return;
+            if (!user?.email) {
+                setUserProfileLoaded(true);
+                return;
+            }
 
             try {
                 const response = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
@@ -89,10 +93,13 @@ export default function InstructorPage() {
                 }
             } catch (error) {
                 console.error('Error loading user profile:', error);
+            } finally {
+                setUserProfileLoaded(true);
             }
         };
 
         if (isInstructor) {
+            setUserProfileLoaded(false);
             loadUserProfile();
         }
     }, [user, isInstructor]);
@@ -129,12 +136,12 @@ export default function InstructorPage() {
         };
 
         if (isInstructor) {
-            // 관리자인 경우 바로 로드, 교육자인 경우 병원 정보를 먼저 가져온 후 로드
-            if (isAdmin || userHospital) {
+            // 관리자인 경우 바로 로드, 교육자인 경우 병원 정보가 있을 때만 로드
+            if (isAdmin || (userProfileLoaded && userHospital)) {
                 loadFilterOptions();
             }
         }
-    }, [isInstructor, isAdmin, userHospital]);
+    }, [isInstructor, isAdmin, userProfileLoaded, userHospital]);
 
     // Load categories from lecture list
     useEffect(() => {
@@ -158,12 +165,12 @@ export default function InstructorPage() {
         };
 
         if (isInstructor) {
-            // 병원 정보가 로드된 후에 카테고리 로드 (관리자도 병원 정보 필요)
-            if (userHospital !== undefined) {
+            // 관리자는 바로 로드, 교육자는 병원 정보가 있을 때만 카테고리 로드
+            if (isAdmin || (userProfileLoaded && userHospital)) {
                 loadCategories();
             }
         }
-    }, [isInstructor, userHospital]);
+    }, [isInstructor, isAdmin, userProfileLoaded, userHospital]);
 
     // Handle "all" hospitals checkbox - only select all when toggled ON
     useEffect(() => {
@@ -275,8 +282,13 @@ export default function InstructorPage() {
         setReportMessage(null);
     };
 
-    const buildReportTableHTML = useCallback((data: any[][], recentlyChangedCells?: [number, number][]) => {
+    const buildReportTableHTML = useCallback((
+        data: any[][],
+        recentlyChangedCells?: [number, number][],
+        peachBackgroundNameCols?: number[]
+    ) => {
         const recentlySet = new Set(recentlyChangedCells?.map(([r, c]) => `${r},${c}`) ?? []);
+        const peachSet = new Set(peachBackgroundNameCols ?? []);
         let html = '<table style="border-collapse:collapse;table-layout:auto;width:max-content;min-width:100%">';
         // thead
         html += '<thead style="position:sticky;top:0;background:#f3f4f6;z-index:10">';
@@ -287,6 +299,10 @@ export default function InstructorPage() {
                 let style = 'padding:4px 4px;border:1px solid #d1d5db;font-weight:600;color:#000;text-align:center;';
                 if (ci === 0) style += 'position:sticky;left:0;z-index:5;background:#f3f4f6;min-width:200px;width:200px;';
                 else if (ci === 1) style += 'position:sticky;left:200px;z-index:5;background:#f3f4f6;min-width:300px;width:300px;';
+                // 3월 근무가 no인 F1/F2 사용자 이름 셀: 연한 복숭아색
+                if (r === 1 && ci >= 2 && peachSet.has(ci)) {
+                    style += 'background:#ffdab9;';
+                }
                 html += `<th style="${style}">${v}</th>`;
             });
             html += '</tr>';
@@ -330,7 +346,7 @@ export default function InstructorPage() {
         return html;
     }, []);
 
-    const openReportInNewWindow = useCallback((data: any[][], recentlyChangedCells?: [number, number][]) => {
+    const openReportInNewWindow = useCallback((data: any[][], recentlyChangedCells?: [number, number][], peachBackgroundNameCols?: number[]) => {
         if (!data || data.length === 0) return;
         if (reportWindowRef.current && !reportWindowRef.current.closed) {
             reportWindowRef.current.close();
@@ -397,7 +413,7 @@ export default function InstructorPage() {
                 `report_${hospitalStr}_${positionStr}_${dateStr}.csv`
             );
         };
-        const tableHTML = buildReportTableHTML(data, recentlyChangedCells);
+        const tableHTML = buildReportTableHTML(data, recentlyChangedCells, peachBackgroundNameCols);
         w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>레포트 결과</title>
 <style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f9fafb;}
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
@@ -446,8 +462,16 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
             return;
         }
 
-        // 교육자인 경우 자신의 병원만 선택했는지 검증
-        if (!isAdmin && userHospital) {
+        // 교육자인 경우 병원 정보가 있어야 하고, 자신의 병원만 선택 가능
+        if (!isAdmin) {
+            if (!userHospital) {
+                setReportMessage({
+                    type: 'error',
+                    text: '병원 정보가 등록되어 있지 않아 접근할 수 없습니다. 관리자에게 문의하세요.'
+                });
+                setTimeout(() => setReportMessage(null), 5000);
+                return;
+            }
             const selectedHospitalsArray = Array.from(selectedHospitals);
             const hasInvalidHospital = selectedHospitalsArray.some(hospital => hospital !== userHospital);
             if (hasInvalidHospital) {
@@ -495,7 +519,7 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
                 setReportData(data.tableData);
                 setReportMessage({ type: 'success', text: data.message || '레포트 작성이 완료되었습니다.' });
                 // 새창에서 레포트 열기 (24시간 이내 변경 셀은 노란색으로 표시)
-                openReportInNewWindow(data.tableData, data.recentlyChangedCells);
+                openReportInNewWindow(data.tableData, data.recentlyChangedCells, data.peachBackgroundNameCols);
             } else {
                 throw new Error(data.error || data.message || '레포트 작성 중 오류가 발생했습니다.');
             }
@@ -524,6 +548,37 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
 
     if (!isInstructor) {
         return null; // Will redirect
+    }
+
+    // 교육자 프로필(병원 정보) 로딩 중
+    if (!isAdmin && !userProfileLoaded) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">프로필 정보를 불러오는 중...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // 교육자이면서 병원 정보가 없으면 접근 차단
+    if (!isAdmin && userProfileLoaded && !userHospital) {
+        return (
+            <div className="container mx-auto px-4 py-12">
+                <div className="mx-auto max-w-2xl text-center">
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4">교육자 패널</h1>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-8 mt-8">
+                        <p className="text-lg text-amber-800 font-medium">
+                            병원 정보가 등록되어 있지 않아 접근할 수 없습니다.
+                        </p>
+                        <p className="mt-4 text-gray-600">
+                            프로필에 병원 정보를 등록해 주시거나, 관리자에게 문의하세요.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (

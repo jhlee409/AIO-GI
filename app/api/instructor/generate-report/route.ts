@@ -22,12 +22,10 @@ export async function POST(request: NextRequest) {
 
         const { hospitals, positions, name, categories, userEmail } = requestBody;
 
-        // 서버 측 검증: 교육자는 자신의 병원만 선택 가능
-        if (userEmail && !isAdminEmail(userEmail) && hospitals && Array.isArray(hospitals) && hospitals.length > 0) {
+        // 서버 측 검증: 교육자는 병원 정보가 있어야 하고, 자신의 병원만 선택 가능
+        if (userEmail && !isAdminEmail(userEmail)) {
             const adminDb = getAdminDb();
 
-            // 사용자 정보 조회
-            let userData: any = null;
             let snapshot = await adminDb.collection('users')
                 .where('이메일', '==', userEmail)
                 .limit(1)
@@ -55,11 +53,22 @@ export async function POST(request: NextRequest) {
             }
 
             if (!snapshot.empty) {
-                userData = snapshot.docs[0].data();
+                const userData = snapshot.docs[0].data();
                 const userHospital = String(userData['병원'] || userData['병원명'] || userData['hospital'] || '').trim();
 
+                // 교육자에게 병원 정보가 없으면 접근 차단
+                if (!userHospital) {
+                    return NextResponse.json(
+                        {
+                            success: false,
+                            error: '병원 정보가 등록되어 있지 않아 접근할 수 없습니다. 관리자에게 문의하세요.'
+                        },
+                        { status: 403 }
+                    );
+                }
+
                 // 교육자가 자신의 병원이 아닌 다른 병원을 선택했는지 확인
-                if (userHospital) {
+                if (hospitals && Array.isArray(hospitals) && hospitals.length > 0) {
                     const hasInvalidHospital = hospitals.some((hospital: string) => hospital !== userHospital);
                     if (hasInvalidHospital) {
                         return NextResponse.json(
@@ -410,6 +419,19 @@ export async function POST(request: NextRequest) {
             const name = user['이름'] || user['성명'] || user['name'] || '';
             if (!data[1]) data[1] = [];
             data[1][colIndex] = name;
+        });
+
+        // 3월 근무가 'no'인 F1/F2 사용자의 이름 셀 컬럼 인덱스 수집 (연한 복숭아색 배경용)
+        // F2는 F2, F2D, F2C, FCD와 동일하게 취급
+        const f2Variants = ['F2', 'F2D', 'F2C', 'FCD'];
+        const peachBackgroundNameCols: number[] = [];
+        users.forEach((user, index) => {
+            const position = String(user['직위'] || user['position'] || '').trim().toUpperCase();
+            const marchWork = String(user['3월 근무'] ?? user['3월근무'] ?? '').trim().toLowerCase();
+            const isF1OrF2 = position === 'F1' || f2Variants.includes(position);
+            if (isF1OrF2 && marchWork === 'no') {
+                peachBackgroundNameCols.push(2 + index);
+            }
         });
 
         // 6. Fill lecture data starting from row 2 (index 2)
@@ -870,7 +892,8 @@ export async function POST(request: NextRequest) {
             success: true,
             message: '레포트 작성이 완료되었습니다.',
             tableData: newData,
-            recentlyChangedCells
+            recentlyChangedCells,
+            peachBackgroundNameCols
         });
 
     } catch (error: any) {
