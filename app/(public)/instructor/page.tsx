@@ -14,7 +14,6 @@ export default function InstructorPage() {
     const router = useRouter();
     const [isInstructor, setIsInstructor] = useState<boolean | null>(null);
     const [checking, setChecking] = useState(true);
-    const [showOutputSelection, setShowOutputSelection] = useState(true);
     const [hospitals, setHospitals] = useState<string[]>([]);
     const [positions, setPositions] = useState<string[]>([]);
     const [selectedHospitals, setSelectedHospitals] = useState<Set<string>>(new Set());
@@ -197,18 +196,6 @@ export default function InstructorPage() {
         }
     }, [selectAllCourses, courses]);
 
-    const handleOutputSelectionClick = () => {
-        setShowOutputSelection(true);
-        // Reset filters when opening the selection modal
-        setSelectedHospitals(new Set());
-        setSelectedPositions(new Set());
-        setSelectedCourses(new Set());
-        setNameInput('');
-        setSelectAllHospitals(false);
-        setSelectAllPositions(false);
-        setSelectAllCourses(false);
-    };
-
     const handleHospitalChange = (hospital: string) => {
         // 교육자인 경우 자신의 병원만 선택 가능
         if (!isAdmin && userHospital && hospital !== userHospital) {
@@ -276,9 +263,6 @@ export default function InstructorPage() {
         setSelectAllHospitals(false);
         setSelectAllPositions(false);
         setSelectAllCourses(false);
-        // Switch to output selection screen
-        setShowOutputSelection(true);
-        // Clear any report messages
         setReportMessage(null);
     };
 
@@ -597,15 +581,6 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6 w-[80%] mx-auto">
                     <div className="flex flex-wrap gap-3 justify-center items-center">
                         <button
-                            onClick={handleOutputSelectionClick}
-                            className={`px-6 py-2 rounded-lg transition font-medium ${showOutputSelection
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-blue-500 text-white hover:bg-blue-600'
-                                }`}
-                        >
-                            출력대상선택
-                        </button>
-                        <button
                             onClick={handleGenerateReport}
                             disabled={isGeneratingReport}
                             className={`px-6 py-2 rounded-lg transition font-medium ${isGeneratingReport
@@ -634,9 +609,12 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
 
                 </div>
 
+                <p className="text-center text-gray-600 text-lg mb-4 w-[80%] mx-auto">
+                    원하시는 조건을 선택해 주세요
+                </p>
+
                 {/* Output Selection Boxes */}
-                {showOutputSelection && (
-                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6 space-y-4 w-[80%] mx-auto">
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6 space-y-4 w-[80%] mx-auto">
                         {/* First Box: 병원 */}
                         <div className="border border-gray-300 rounded-lg p-4">
                             <h3 className="text-lg font-semibold text-gray-900 mb-3">병원</h3>
@@ -745,7 +723,6 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
                             </div>
                         </div>
                     </div>
-                )}
             </div>
         </div>
     );

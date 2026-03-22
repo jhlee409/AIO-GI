@@ -14,6 +14,7 @@ import {
 import { findAllInstructorsByHospital } from '@/lib/instructor-utils';
 import { isAdminEmail } from '@/lib/auth-server';
 import nodemailer from 'nodemailer';
+import type { Bucket } from '@google-cloud/storage';
 
 /** EMT-L 내시경 모델별 ROI (x1, y1, x2, y2) */
 const EMTL_ROI_BY_MODEL: Record<string, [number, number, number, number]> = {
@@ -63,6 +64,43 @@ export interface EmtJobResult {
  * Process EMT analysis job
  * This function performs the actual analysis work
  */
+const EMT_RESULT_STORAGE_FOLDER = 'Simulator_training/EMT/EMT_result/';
+
+/** 직위-이름-EMT-{숫자타임스탬프}.{확장자} 형태의 합격 동영상만 매칭 (평가서 txt 등 제외) */
+const EMT_PASS_VIDEO_SUFFIX = /^\d+\.[a-zA-Z0-9]+$/;
+
+/**
+ * 동일 사용자의 이전 EMT/EMT-L 합격 동영상(Storage 객체)을 삭제하고 현재 제출분만 남깁니다.
+ */
+async function deletePreviousEmtPassVideosForUser(
+    bucket: Bucket,
+    jobId: string,
+    position: string,
+    name: string,
+    keepPath: string
+): Promise<void> {
+    const prefix = `${EMT_RESULT_STORAGE_FOLDER}${position}-${name}-EMT-`;
+    if (!keepPath.startsWith(prefix)) {
+        console.warn(`[emt-processor:${jobId}] Skip EMT pass video cleanup: path mismatch`, { keepPath, prefix });
+        return;
+    }
+    try {
+        const [files] = await bucket.getFiles({ prefix });
+        for (const file of files) {
+            if (file.name === keepPath) continue;
+            const suffix = file.name.slice(prefix.length);
+            if (!EMT_PASS_VIDEO_SUFFIX.test(suffix)) continue;
+            await file.delete();
+            console.log(`[emt-processor:${jobId}] Deleted previous EMT pass video: ${file.name}`);
+        }
+    } catch (error: any) {
+        console.error(`[emt-processor:${jobId}] Error deleting previous EMT pass videos:`, {
+            message: error?.message,
+            stack: error?.stack?.substring(0, 500),
+        });
+    }
+}
+
 // Helper function to update job progress
 async function updateJobProgress(jobId: string, progress: number, message?: string) {
     try {
@@ -306,6 +344,8 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
         let adminReportEmailSent = false;
         if (analysisPassed) {
             try {
+                await deletePreviousEmtPassVideosForUser(bucket, jobId, position, name, videoPath);
+
                 // jhlee409: 동영상 업로드 안 함 → URL 표시하지 않음, 이후 동영상 삭제
                 const videoFileRef = bucket.file(videoPath);
                 let videoUrl = 'N/A';
