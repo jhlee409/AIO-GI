@@ -17,7 +17,7 @@
     "autoprefixer": "^10.4.22",
     "firebase": "^12.6.0",
     "firebase-admin": "^13.6.0",
-    "firebase-functions": "^7.0.2",
+    "firebase-functions": "^7.2.2",
     "lucide-react": "^0.554.0",
     "mammoth": "^1.6.0",
     "ml-matrix": "^6.12.1",
