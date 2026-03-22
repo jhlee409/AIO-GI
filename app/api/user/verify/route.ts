@@ -5,6 +5,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 
+/** 명시적으로 비활성일 때만 false. 필드 없음·레거시 데이터는 로그인 허용(기존 403 락아웃 방지). */
+function isExplicitlyInactive(userData: Record<string, unknown>): boolean {
+    const raw =
+        userData['활성상태'] ?? userData['active'] ?? userData['Active'] ?? userData['ACTIVE'];
+    if (raw === undefined || raw === null) return false;
+    if (typeof raw === 'boolean') return raw === false;
+    const s = String(raw).trim().toLowerCase();
+    return s === 'no' || s === 'inactive' || s === 'false' || s === '0' || s === '비활성' || s === '아니오';
+}
+
 export async function POST(request: NextRequest) {
     try {
         let email: string | undefined;
@@ -81,9 +91,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check active status
-        const activeStatus = userData['활성상태'] || userData['active'] || userData['Active'] || userData['ACTIVE'];
-        if (activeStatus !== 'yes') {
+        if (isExplicitlyInactive(userData)) {
             return NextResponse.json(
                 { error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' },
                 { status: 403 }
