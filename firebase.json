@@ -1,0 +1,38 @@
+{
+    "hosting": [
+        {
+            "site": "amcgi-bulletin",
+            "source": ".",
+            "ignore": [
+                "firebase.json",
+                ".git/**",
+                ".env",
+                ".env.local",
+                ".env.development",
+                ".env*.local",
+                ".DS_Store",
+                "**/node_modules/**",
+                ".next/**"
+            ],
+            "frameworksBackend": {
+                "region": "asia-northeast3",
+                "memory": "2GiB",
+                "timeoutSeconds": 540
+            },
+            "build": {
+                "command": "npm run build",
+                "output": ".next"
+            },
+            "rewrites": [
+                {
+                    "source": "/api/**",
+                    "function": "ssramcgibulletin"
+                },
+                {
+                    "source": "**",
+                    "function": "ssramcgibulletin"
+                }
+            ]
+        }
+    ]
+}

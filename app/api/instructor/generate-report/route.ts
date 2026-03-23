@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
 import { isAdminEmail } from '@/lib/auth-server';
+import { calculateAccumulatedWatchTime } from '@/lib/hooks/useCalculateAccumulatedWatchTime';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
+
+/** Cloud Run / 호스팅에서 긴 리포트 생성 허용 (플랫폼이 무시할 수 있음) */
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
     try {
@@ -21,6 +25,27 @@ export async function POST(request: NextRequest) {
         }
 
         const { hospitals, positions, name, categories, userEmail } = requestBody;
+
+        const normalizeCategory = (cat: string): string =>
+            cat.toLowerCase().replace(/\s+/g, ' ').trim();
+
+        if (!Array.isArray(categories) || categories.length === 0) {
+            return NextResponse.json(
+                { success: false, error: '교육 과정(카테고리)을 하나 이상 선택해주세요.' },
+                { status: 400 }
+            );
+        }
+
+        const normalizedCategories = categories
+            .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+            .map((c) => normalizeCategory(c));
+
+        if (normalizedCategories.length === 0) {
+            return NextResponse.json(
+                { success: false, error: '유효한 교육 과정(카테고리)가 없습니다.' },
+                { status: 400 }
+            );
+        }
 
         // 서버 측 검증: 교육자는 병원 정보가 있어야 하고, 자신의 병원만 선택 가능
         if (userEmail && !isAdminEmail(userEmail)) {
@@ -184,14 +209,6 @@ export async function POST(request: NextRequest) {
 
         // Filter by categories and extract lectures
         const lectures: Array<{ category: string; title: string; isVideo: boolean }> = [];
-
-        // 카테고리 이름을 정규화하여 비교 (대소문자 무시, 공백 정규화)
-        const normalizeCategory = (cat: string): string => {
-            return cat.toLowerCase().replace(/\s+/g, ' ').trim();
-        };
-
-
-        const normalizedCategories = categories.map((cat: string) => normalizeCategory(cat));
 
         console.log('[Report Generation] Selected categories:', categories);
         console.log('[Report Generation] Normalized categories:', normalizedCategories);
@@ -452,9 +469,6 @@ export async function POST(request: NextRequest) {
         });
 
         // 6.5. Pre-fetch all watch time data for 'Dx EGD 실전 강의' category
-        // Hook을 사용하여 누적 시청 시간 계산
-        const { calculateAccumulatedWatchTime } = await import('@/lib/hooks/useCalculateAccumulatedWatchTime');
-
         // Collect all user emails
         const userEmails = users
             .map(user => {
