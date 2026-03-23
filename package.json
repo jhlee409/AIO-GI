@@ -21,7 +21,7 @@
     "lucide-react": "^0.554.0",
     "mammoth": "^1.6.0",
     "ml-matrix": "^6.12.1",
-    "next": "^16.0.11",
+    "next": "15.0.8",
     "nodemailer": "^7.0.11",
     "noto-sans-kr": "^0.1.1",
     "openai": "5.10.1",
@@ -40,7 +40,7 @@
     "baseline-browser-mapping": "^2.9.19",
     "cross-env": "^7.0.3",
     "eslint": "^9",
-    "eslint-config-next": "^16.0.10",
+    "eslint-config-next": "15.0.8",
     "firebase-tools": "^15.1.0",
     "postcss": "^8",
     "typescript": "^5.9.3"
