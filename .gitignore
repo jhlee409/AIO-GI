@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# mindvault (generated knowledge graph / wiki / search index)
+/mindvault-out/
+
 # production
 /build
 
