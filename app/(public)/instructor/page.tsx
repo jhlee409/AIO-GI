@@ -264,6 +264,7 @@ export default function InstructorPage() {
         setSelectAllPositions(false);
         setSelectAllCourses(false);
         setReportMessage(null);
+        setReportData(null);
     };
 
     const buildReportTableHTML = useCallback((
@@ -344,7 +345,13 @@ export default function InstructorPage() {
             : 'all';
 
         const w = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
-        if (!w) return;
+        if (!w) {
+            setReportMessage({
+                type: 'error',
+                text: '팝업이 차단되었습니다. 브라우저 주소창 오른쪽의 팝업 차단 아이콘을 클릭하여 허용한 후, 아래 "레포트 다시 열기" 버튼을 눌러주세요.'
+            });
+            return;
+        }
         reportWindowRef.current = w;
 
         const triggerDownload = (blob: Blob, filename: string) => {
@@ -597,6 +604,14 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
                         >
                             선택초기화
                         </button>
+                        {reportData && (
+                            <button
+                                onClick={() => openReportInNewWindow(reportData)}
+                                className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition font-medium"
+                            >
+                                레포트 다시 열기
+                            </button>
+                        )}
                     </div>
                     {reportMessage && (
                         <div className={`mt-4 p-3 rounded-lg text-center ${reportMessage.type === 'success'
