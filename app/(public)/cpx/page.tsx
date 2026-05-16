@@ -72,6 +72,10 @@ interface ChatMessage {
     content: string;
 }
 
+const SILENCE_AUTO_STOP_MS = 1200;
+const MIN_RECORDING_BEFORE_AUTO_STOP_MS = 900;
+const RECORDING_VOLUME_THRESHOLD = 0.025;
+
 export default function CpxPage() {
     const { user } = useAuth();
 
@@ -93,13 +97,20 @@ export default function CpxPage() {
     const [chatEnded, setChatEnded] = useState(false);
     const [autoSendFirstMessage, setAutoSendFirstMessage] = useState(false);
     const [userProfile, setUserProfile] = useState<{ position: string; name: string } | null>(null);
-    const [isListening, setIsListening] = useState(false);
-    const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
+    const [isRecordingSupported, setIsRecordingSupported] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
-    const recognitionRef = useRef<any>(null);
-    const handleSendMessageWithTextRef = useRef<((text: string) => Promise<void>) | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const mediaStreamRef = useRef<MediaStream | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const silenceMonitorFrameRef = useRef<number | null>(null);
+    const recordingStartedAtRef = useRef<number>(0);
+    const lastSpeechAtRef = useRef<number>(0);
+    const hasDetectedSpeechRef = useRef(false);
 
     const selectedContent = selectedItem 
         ? cpxItems.find(item => item.id === selectedItem)
@@ -111,79 +122,224 @@ export default function CpxPage() {
         return match ? match[0] : '';
     };
 
-    // Check if speech recognition is supported
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-            setIsSpeechSupported(!!SpeechRecognition);
-            
-            if (SpeechRecognition) {
-                const recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                recognition.lang = 'ko-KR'; // 한국어 설정
-                
-                recognition.onresult = (event: any) => {
-                    const transcript = event.results[0][0].transcript.trim();
-                    if (transcript) {
-                        setIsListening(false);
-                        // 음성 인식 결과를 입력창에 표시하고 자동 전송
-                        setInputMessage(prev => {
-                            const newMessage = prev ? prev + ' ' + transcript : transcript;
-                            // 자동 전송 (약간의 지연을 두어 상태 업데이트가 완료되도록)
-                            setTimeout(() => {
-                                if (handleSendMessageWithTextRef.current) {
-                                    handleSendMessageWithTextRef.current(newMessage);
-                                }
-                            }, 150);
-                            return newMessage;
-                        });
-                    } else {
-                        setIsListening(false);
-                    }
-                };
-                
-                recognition.onerror = (event: any) => {
-                    console.error('Speech recognition error:', event.error);
-                    setIsListening(false);
-                    if (event.error === 'no-speech') {
-                        alert('음성이 감지되지 않았습니다. 다시 시도해주세요.');
-                    } else if (event.error === 'not-allowed') {
-                        alert('마이크 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
-                    }
-                };
-                
-                recognition.onend = () => {
-                    setIsListening(false);
-                };
-                
-                recognitionRef.current = recognition;
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    const stopMediaStream = () => {
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+    };
 
-    // Start/stop speech recognition
-    const toggleListening = () => {
-        if (!isSpeechSupported) {
-            alert('이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge 브라우저를 사용해주세요.');
+    const stopSilenceMonitor = () => {
+        if (silenceMonitorFrameRef.current !== null) {
+            cancelAnimationFrame(silenceMonitorFrameRef.current);
+            silenceMonitorFrameRef.current = null;
+        }
+
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            void audioContextRef.current.close();
+        }
+        audioContextRef.current = null;
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        }
+        setIsRecording(false);
+    };
+
+    const getPreferredAudioMimeType = () => {
+        if (typeof MediaRecorder === 'undefined') return '';
+
+        const candidates = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+            'audio/ogg;codecs=opus',
+        ];
+
+        return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+    };
+
+    const transcribeAudioBlob = async (audioBlob: Blob) => {
+        if (audioBlob.size === 0) {
+            alert('녹음된 음성이 없습니다. 다시 시도해주세요.');
             return;
         }
 
-        if (isListening) {
-            if (recognitionRef.current) {
-                recognitionRef.current.stop();
+        setIsTranscribing(true);
+
+        try {
+            const formData = new FormData();
+            const extension = audioBlob.type.includes('mp4')
+                ? 'mp4'
+                : audioBlob.type.includes('ogg')
+                    ? 'ogg'
+                    : 'webm';
+            formData.append('audio', audioBlob, `cpx-recording.${extension}`);
+
+            const response = await fetch('/api/cpx/transcribe', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `음성 인식에 실패했습니다. (${response.status})`);
             }
-            setIsListening(false);
-        } else {
-            if (recognitionRef.current) {
-                try {
-                    recognitionRef.current.start();
-                    setIsListening(true);
-                } catch (error) {
-                    console.error('Error starting speech recognition:', error);
-                    setIsListening(false);
+
+            const data = await response.json();
+            const transcript = typeof data.text === 'string' ? data.text.trim() : '';
+
+            if (!transcript) {
+                alert('음성을 인식하지 못했습니다. 다시 시도해주세요.');
+                return;
+            }
+
+            setInputMessage(prev => prev ? `${prev} ${transcript}` : transcript);
+            requestAnimationFrame(() => {
+                inputRef.current?.focus({ preventScroll: true });
+            });
+        } catch (error: any) {
+            console.error('Error transcribing audio:', error);
+            alert(`음성 인식 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`);
+        } finally {
+            setIsTranscribing(false);
+        }
+    };
+
+    // Check if recording is supported
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setIsRecordingSupported(
+                typeof MediaRecorder !== 'undefined' &&
+                !!navigator.mediaDevices?.getUserMedia
+            );
+        }
+
+        return () => {
+            stopSilenceMonitor();
+            stopRecording();
+            stopMediaStream();
+        };
+    }, []);
+
+    const startSilenceMonitor = (stream: MediaStream) => {
+        stopSilenceMonitor();
+
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        const audioContext = new AudioContextClass();
+        const analyser = audioContext.createAnalyser();
+        const source = audioContext.createMediaStreamSource(stream);
+
+        analyser.fftSize = 2048;
+        const samples = new Uint8Array(analyser.fftSize);
+        source.connect(analyser);
+        audioContextRef.current = audioContext;
+        recordingStartedAtRef.current = performance.now();
+        lastSpeechAtRef.current = recordingStartedAtRef.current;
+        hasDetectedSpeechRef.current = false;
+
+        const monitor = () => {
+            analyser.getByteTimeDomainData(samples);
+
+            let sumSquares = 0;
+            for (const sample of samples) {
+                const normalized = (sample - 128) / 128;
+                sumSquares += normalized * normalized;
+            }
+
+            const rms = Math.sqrt(sumSquares / samples.length);
+            const now = performance.now();
+
+            if (rms > RECORDING_VOLUME_THRESHOLD) {
+                hasDetectedSpeechRef.current = true;
+                lastSpeechAtRef.current = now;
+            }
+
+            const hasPassedMinimumDuration = now - recordingStartedAtRef.current > MIN_RECORDING_BEFORE_AUTO_STOP_MS;
+            const hasBeenSilentLongEnough = now - lastSpeechAtRef.current > SILENCE_AUTO_STOP_MS;
+
+            if (
+                hasDetectedSpeechRef.current &&
+                hasPassedMinimumDuration &&
+                hasBeenSilentLongEnough &&
+                mediaRecorderRef.current?.state === 'recording'
+            ) {
+                stopRecording();
+                return;
+            }
+
+            silenceMonitorFrameRef.current = requestAnimationFrame(monitor);
+        };
+
+        silenceMonitorFrameRef.current = requestAnimationFrame(monitor);
+    };
+
+    // Start/stop recording for transcription
+    const toggleRecording = async () => {
+        if (!isRecordingSupported) {
+            alert('이 브라우저는 마이크 녹음을 지원하지 않습니다. 최신 Chrome 또는 Edge 브라우저를 사용해주세요.');
+            return;
+        }
+
+        if (isRecording) {
+            stopRecording();
+            return;
+        }
+
+        try {
+            audioChunksRef.current = [];
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+            });
+            mediaStreamRef.current = stream;
+
+            const mimeType = getPreferredAudioMimeType();
+            const recorder = mimeType
+                ? new MediaRecorder(stream, { mimeType })
+                : new MediaRecorder(stream);
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
                 }
+            };
+
+            recorder.onerror = (event) => {
+                console.error('MediaRecorder error:', event);
+                setIsRecording(false);
+                stopSilenceMonitor();
+                stopMediaStream();
+                alert('녹음 중 오류가 발생했습니다. 다시 시도해주세요.');
+            };
+
+            recorder.onstop = () => {
+                stopSilenceMonitor();
+                const recordingType = recorder.mimeType || mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunksRef.current, { type: recordingType });
+                audioChunksRef.current = [];
+                stopMediaStream();
+                void transcribeAudioBlob(audioBlob);
+            };
+
+            mediaRecorderRef.current = recorder;
+            recorder.start();
+            setIsRecording(true);
+            startSilenceMonitor(stream);
+        } catch (error: any) {
+            console.error('Error starting audio recording:', error);
+            setIsRecording(false);
+            stopSilenceMonitor();
+            stopMediaStream();
+            if (error?.name === 'NotAllowedError') {
+                alert('마이크 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
+            } else {
+                alert(`마이크 녹음을 시작할 수 없습니다: ${error.message || '알 수 없는 오류'}`);
             }
         }
     };
@@ -716,22 +872,22 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                         }
                                                     }}
                                                     placeholder={chatEnded ? "대화가 종료되었습니다." : "질문을 입력하세요..."}
-                                                    disabled={loadingChat || chatEnded || loadingScenario}
+                                                    disabled={loadingChat || chatEnded || loadingScenario || isTranscribing}
                                                     className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                                     rows={2}
                                                 />
-                                                {isSpeechSupported && (
+                                                {isRecordingSupported && (
                                                     <button
-                                                        onClick={toggleListening}
-                                                        disabled={loadingChat || chatEnded || loadingScenario}
+                                                        onClick={toggleRecording}
+                                                        disabled={loadingChat || chatEnded || loadingScenario || isTranscribing}
                                                         className={`px-4 py-2 rounded-lg transition-colors flex items-center justify-center ${
-                                                            isListening
+                                                            isRecording
                                                                 ? 'bg-blue-500 text-white hover:bg-blue-400 transition-all duration-300 ease-in-out'
                                                                 : 'bg-blue-500 text-white hover:bg-blue-400 transition-all duration-300 ease-in-out'
                                                         } disabled:bg-blue-300 disabled:text-white disabled:cursor-not-allowed`}
-                                                        title={isListening ? '음성 인식 중지' : '음성으로 입력'}
+                                                        title={isRecording ? '녹음 중지 및 전사' : '음성 녹음'}
                                                     >
-                                                        {isListening ? (
+                                                        {isRecording ? (
                                                             <MicOff className="w-5 h-5" />
                                                         ) : (
                                                             <Mic className="w-5 h-5" />
@@ -747,10 +903,16 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                     전송
                                                 </button>
                                             </div>
-                                            {isListening && (
+                                            {isRecording && (
                                                 <div className="mt-2 text-sm text-red-600 flex items-center gap-2">
                                                     <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-                                                    음성 인식 중... 말씀해주세요.
+                                                    녹음 중... 말이 끝나면 자동으로 전사합니다.
+                                                </div>
+                                            )}
+                                            {isTranscribing && (
+                                                <div className="mt-2 text-sm text-blue-600 flex items-center gap-2">
+                                                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                                                    음성을 텍스트로 변환 중입니다.
                                                 </div>
                                             )}
                                         </div>
