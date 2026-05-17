@@ -4,8 +4,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminStorage } from '@/lib/firebase-admin';
-import { formatStructuredCpxScenario, StructuredCpxScenario } from '@/lib/cpx-structured-scenario';
-import hematemesisScenario from '@/data/cpx/cpx_07_hematemesis.json';
+import { getStructuredCpxScenario } from '@/lib/cpx-scenario-registry';
+import { formatStructuredCpxScenario } from '@/lib/cpx-structured-scenario';
 import mammoth from 'mammoth';
 
 export async function GET(request: NextRequest) {
@@ -22,9 +22,10 @@ export async function GET(request: NextRequest) {
         // Format case number to 2 digits (e.g., "1" -> "01")
         const formattedCaseNumber = caseNumber.padStart(2, '0');
 
-        if (formattedCaseNumber === '07') {
+        const structuredScenario = getStructuredCpxScenario(formattedCaseNumber);
+        if (structuredScenario) {
             return NextResponse.json({
-                text: formatStructuredCpxScenario(hematemesisScenario as StructuredCpxScenario),
+                text: formatStructuredCpxScenario(structuredScenario),
                 messages: [],
             });
         }

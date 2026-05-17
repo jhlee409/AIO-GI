@@ -5,8 +5,18 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, X, Mic, MicOff } from 'lucide-react';
+import { Send, X, Mic, MicOff, Volume2, Loader2, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { useCpxCaseFlow } from '@/lib/hooks/useCpxCaseFlow';
+import {
+    getNextPatientOutputMode,
+    getNextPatientOutputModeLabel,
+    isPatientTtsMode,
+    PatientOutputMode,
+    shouldSpeakPatientMessage,
+    shouldShowPatientText,
+} from '@/lib/cpx-patient-output-mode';
+import { isLikelyBrowserAutoplayBlock } from '@/lib/cpx-tts';
 
 interface CpxItem {
     id: string;
@@ -72,7 +82,7 @@ interface ChatMessage {
     content: string;
 }
 
-const SILENCE_AUTO_STOP_MS = 1200;
+const SILENCE_AUTO_STOP_MS = 1800;
 const MIN_RECORDING_BEFORE_AUTO_STOP_MS = 900;
 const RECORDING_VOLUME_THRESHOLD = 0.025;
 
@@ -100,9 +110,16 @@ export default function CpxPage() {
     const [isRecording, setIsRecording] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [isRecordingSupported, setIsRecordingSupported] = useState(false);
+    const [ttsLoadingMessageIndex, setTtsLoadingMessageIndex] = useState<number | null>(null);
+    const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
+    const [patientAudioNotice, setPatientAudioNotice] = useState('');
+    const [patientOutputMode, setPatientOutputMode] = useState<PatientOutputMode>('text');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
+    const patientAudioRef = useRef<HTMLAudioElement | null>(null);
+    const patientAudioUrlRef = useRef<string | null>(null);
+    const autoPlayedPatientMessageRef = useRef<string | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -115,6 +132,31 @@ export default function CpxPage() {
     const selectedContent = selectedItem 
         ? cpxItems.find(item => item.id === selectedItem)
         : null;
+    const cpxCaseFlow = useCpxCaseFlow(selectedItem);
+    const isPatientTtsEnabled = cpxCaseFlow.canUsePatientOutputToggle;
+    const patientVoiceMode = isPatientTtsMode(patientOutputMode);
+    const nextPatientOutputModeLabel = getNextPatientOutputModeLabel(patientOutputMode);
+
+    const releasePatientAudio = () => {
+        if (patientAudioRef.current) {
+            patientAudioRef.current.pause();
+            patientAudioRef.current.src = '';
+            patientAudioRef.current.onended = null;
+            patientAudioRef.current.onerror = null;
+            patientAudioRef.current = null;
+        }
+
+        if (patientAudioUrlRef.current) {
+            URL.revokeObjectURL(patientAudioUrlRef.current);
+            patientAudioUrlRef.current = null;
+        }
+    };
+
+    const stopPatientSpeech = () => {
+        releasePatientAudio();
+        setSpeakingMessageIndex(null);
+        setTtsLoadingMessageIndex(null);
+    };
 
     // Extract case number from item id (e.g., 'cpx_01' -> '01')
     const getCaseNumber = (itemId: string) => {
@@ -175,6 +217,9 @@ export default function CpxPage() {
                     ? 'ogg'
                     : 'webm';
             formData.append('audio', audioBlob, `cpx-recording.${extension}`);
+            if (selectedItem) {
+                formData.append('caseId', selectedItem);
+            }
 
             const response = await fetch('/api/cpx/transcribe', {
                 method: 'POST',
@@ -216,6 +261,7 @@ export default function CpxPage() {
         }
 
         return () => {
+            releasePatientAudio();
             stopSilenceMonitor();
             stopRecording();
             stopMediaStream();
@@ -375,6 +421,7 @@ export default function CpxPage() {
 
     // Auto-start chat when item is selected and reset when item changes
     useEffect(() => {
+        stopPatientSpeech();
         if (selectedItem) {
             // Reset all chat state when item changes
             setShowChat(true);
@@ -382,7 +429,10 @@ export default function CpxPage() {
             setChatEnded(false);
             setInputMessage('');
             setScenario('');
-            setAutoSendFirstMessage(true);
+            setAutoSendFirstMessage(cpxCaseFlow.shouldAutoSendFirstQuestion);
+            setPatientAudioNotice('');
+            setPatientOutputMode(cpxCaseFlow.initialPatientOutputMode);
+            autoPlayedPatientMessageRef.current = null;
             // Load scenario when item changes
             loadScenario();
         }
@@ -532,6 +582,14 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
             const data = await response.json();
             setScenario(data.text);
+
+            const initialAssistantMessage = cpxCaseFlow.initialAssistantMessage;
+            if (initialAssistantMessage) {
+                setMessages([{
+                    role: 'assistant',
+                    content: initialAssistantMessage,
+                }]);
+            }
         } catch (error) {
             console.error('Error loading scenario:', error);
             alert('시나리오를 불러오는 중 오류가 발생했습니다.');
@@ -541,6 +599,9 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
     };
 
     const handleCloseChat = () => {
+        stopPatientSpeech();
+        setPatientAudioNotice('');
+        setPatientOutputMode('text');
         setShowChat(false);
         setMessages([]);
         setScenario('');
@@ -549,6 +610,91 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         setSelectedItem(null);
     };
 
+    const playPatientSpeech = async (messageContent: string, messageIndex: number, notifyOnError = true) => {
+        if (!selectedItem || !isPatientTtsEnabled || ttsLoadingMessageIndex !== null) return;
+
+        if (speakingMessageIndex === messageIndex) {
+            stopPatientSpeech();
+            return;
+        }
+
+        stopPatientSpeech();
+        setPatientAudioNotice('');
+        setTtsLoadingMessageIndex(messageIndex);
+
+        try {
+            const response = await fetch('/api/cpx/tts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    caseId: selectedItem,
+                    text: messageContent,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || '환자 음성을 생성하지 못했습니다.');
+            }
+
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+
+            patientAudioUrlRef.current = audioUrl;
+            patientAudioRef.current = audio;
+            setSpeakingMessageIndex(messageIndex);
+
+            audio.onended = () => {
+                releasePatientAudio();
+                setSpeakingMessageIndex(null);
+            };
+            audio.onerror = () => {
+                releasePatientAudio();
+                setSpeakingMessageIndex(null);
+                if (notifyOnError) {
+                    alert('환자 음성 재생 중 오류가 발생했습니다.');
+                }
+            };
+
+            await audio.play();
+        } catch (error: any) {
+            console.error('Error playing patient speech:', error);
+            releasePatientAudio();
+            setSpeakingMessageIndex(null);
+            if (!notifyOnError && isLikelyBrowserAutoplayBlock(error)) {
+                setPatientAudioNotice('브라우저가 자동 음성 재생을 막았습니다. 스피커 버튼을 한 번 누르면 환자 음성을 들을 수 있습니다.');
+                return;
+            }
+            if (notifyOnError) {
+                alert(error.message || '환자 음성 재생 중 오류가 발생했습니다.');
+            }
+        } finally {
+            setTtsLoadingMessageIndex(null);
+        }
+    };
+
+    const togglePatientOutputMode = () => {
+        const nextMode = getNextPatientOutputMode(patientOutputMode);
+        autoPlayedPatientMessageRef.current = null;
+        setPatientAudioNotice('');
+        setPatientOutputMode(nextMode);
+
+        if (!isPatientTtsMode(nextMode)) {
+            stopPatientSpeech();
+            return;
+        }
+
+        const assistantMessages = messages.filter((message) => message.role === 'assistant');
+        const latestAssistantMessage = assistantMessages.at(-1);
+        if (!latestAssistantMessage || !shouldSpeakPatientMessage(nextMode, latestAssistantMessage.content)) return;
+
+        const latestAssistantIndex = assistantMessages.length - 1;
+        autoPlayedPatientMessageRef.current = `${selectedItem}:${latestAssistantIndex}:${latestAssistantMessage.content}`;
+        void playPatientSpeech(latestAssistantMessage.content, latestAssistantIndex, true);
+    };
 
     const handleSendMessageWithText = async (messageText: string) => {
         if (!messageText.trim() || loadingChat || chatEnded) return;
@@ -582,13 +728,6 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         });
 
         try {
-            // 디버깅: 요청 데이터 확인
-            console.log('Sending request (handleSendMessageWithText):', {
-                messagesCount: newMessages.length,
-                scenarioLength: scenario?.length || 0,
-                scenarioPreview: scenario?.substring(0, 100) || 'empty',
-            });
-
             const response = await fetch('/api/cpx/chat', {
                 method: 'POST',
                 headers: {
@@ -733,6 +872,29 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         }
     };
 
+    useEffect(() => {
+        if (!isPatientTtsEnabled || !patientVoiceMode) return;
+
+        const assistantMessages = messages.filter((message) => message.role === 'assistant');
+        const latestAssistantMessage = assistantMessages.at(-1);
+        if (!latestAssistantMessage) return;
+        if (!shouldSpeakPatientMessage(patientOutputMode, latestAssistantMessage.content)) return;
+
+        const latestAssistantIndex = assistantMessages.length - 1;
+        const messageKey = `${selectedItem}:${latestAssistantIndex}:${latestAssistantMessage.content}`;
+        if (autoPlayedPatientMessageRef.current === messageKey) return;
+        autoPlayedPatientMessageRef.current = messageKey;
+
+        const timer = window.setTimeout(() => {
+            void playPatientSpeech(latestAssistantMessage.content, latestAssistantIndex, false);
+        }, 0);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages, isPatientTtsEnabled, patientVoiceMode, selectedItem]);
+
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -791,17 +953,38 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                 /* 채팅 인터페이스 */
                                 <div className="w-full h-full flex flex-col relative">
                                         {/* 채팅 헤더 - 고정 */}
-                                        <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 p-4 flex items-center justify-between">
-                                            <h3 className="text-xl font-bold text-gray-900">
+                                        <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 p-4 flex items-center justify-between gap-3">
+                                            <h3 className="min-w-0 flex-1 truncate text-xl font-bold text-gray-900">
                                                 {selectedContent?.title} - 병력청취 훈련
                                             </h3>
-                                            <button
-                                                onClick={handleCloseChat}
-                                                className="text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full p-1 transition-colors"
-                                                aria-label="닫기"
-                                            >
-                                                <X className="w-5 h-5" />
-                                            </button>
+                                            <div className="flex shrink-0 items-center gap-2">
+                                                {isPatientTtsEnabled && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={togglePatientOutputMode}
+                                                        className={`inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors ${
+                                                            patientVoiceMode
+                                                                ? 'border-blue-200 bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                                                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                                                        }`}
+                                                        title={nextPatientOutputModeLabel}
+                                                        aria-label={nextPatientOutputModeLabel}
+                                                    >
+                                                        {patientVoiceMode ? (
+                                                            <MessageSquare className="h-4 w-4" />
+                                                        ) : (
+                                                            <Volume2 className="h-4 w-4" />
+                                                        )}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={handleCloseChat}
+                                                    className="text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full p-1 transition-colors"
+                                                    aria-label="닫기"
+                                                >
+                                                    <X className="w-5 h-5" />
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {/* 메시지 영역 */}
@@ -823,17 +1006,46 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                             ) : (
                                                 messages
                                                     .filter(message => message.role === 'assistant')
-                                                    .map((message, index) => (
-                                                        <div
-                                                            key={index}
-                                                            className="flex justify-start"
-                                                        >
-                                                            <div className="inline-block rounded-lg px-3 py-2 bg-gray-100 text-gray-900">
-                                                                <span className="font-semibold mr-2 text-sm">환자:</span>
-                                                                <span className="whitespace-pre-wrap">{message.content}</span>
+                                                    .map((message, index) => {
+                                                        const showPatientText = shouldShowPatientText(patientOutputMode, message.content);
+                                                        const showSpeechButton = isPatientTtsEnabled && shouldSpeakPatientMessage(patientOutputMode, message.content);
+
+                                                        return (
+                                                            <div
+                                                                key={index}
+                                                                className="flex justify-start"
+                                                            >
+                                                                <div className="inline-flex max-w-full items-start gap-2 rounded-lg px-3 py-2 bg-gray-100 text-gray-900">
+                                                                    <div>
+                                                                        <span className="font-semibold mr-2 text-sm">환자:</span>
+                                                                        {showPatientText && (
+                                                                            <span className="whitespace-pre-wrap">{message.content}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    {showSpeechButton && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => playPatientSpeech(message.content, index)}
+                                                                            disabled={ttsLoadingMessageIndex !== null && ttsLoadingMessageIndex !== index}
+                                                                            className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition ${
+                                                                                speakingMessageIndex === index
+                                                                                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                                                                    : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                                                                            } disabled:cursor-not-allowed disabled:opacity-50`}
+                                                                            title={speakingMessageIndex === index ? '환자 음성 정지' : '환자 음성 재생'}
+                                                                            aria-label={speakingMessageIndex === index ? '환자 음성 정지' : '환자 음성 재생'}
+                                                                        >
+                                                                            {ttsLoadingMessageIndex === index ? (
+                                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                            ) : (
+                                                                                <Volume2 className="h-4 w-4" />
+                                                                            )}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))
+                                                        );
+                                                    })
                                             )}
                                             {loadingChat && (
                                                 <div className="flex justify-start">
@@ -851,6 +1063,25 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 <div className="flex justify-center">
                                                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                                                         <p className="text-yellow-800 font-semibold">대화가 종료되었습니다.</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {isPatientTtsEnabled && patientAudioNotice && (
+                                                <div className="flex justify-start">
+                                                    <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                                                        <span>{patientAudioNotice}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const assistantMessages = messages.filter((message) => message.role === 'assistant');
+                                                                const latestAssistantMessage = assistantMessages.at(-1);
+                                                                if (!latestAssistantMessage) return;
+                                                                void playPatientSpeech(latestAssistantMessage.content, assistantMessages.length - 1, true);
+                                                            }}
+                                                            className="inline-flex h-7 items-center rounded-md bg-blue-600 px-2 text-xs font-medium text-white hover:bg-blue-700"
+                                                        >
+                                                            음성 재생
+                                                        </button>
                                                     </div>
                                                 </div>
                                             )}

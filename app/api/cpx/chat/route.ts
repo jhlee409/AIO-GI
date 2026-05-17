@@ -3,6 +3,10 @@
  * Handles conversation with ChatGPT for patient history taking
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { getCpxBroadQuestionOverride } from '@/lib/cpx-broad-question';
+import { getCpxChatMaxTokens } from '@/lib/cpx-chat-config';
+import { buildCpxChatSystemPrompt } from '@/lib/cpx-chat-prompt';
+import { CPX_FINAL_CLOSING_MESSAGE, getCpxClosingFlowOverride } from '@/lib/cpx-closing-flow';
 
 interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
@@ -30,6 +34,16 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const closingFlowOverride = getCpxClosingFlowOverride({ messages, scenario });
+        if (closingFlowOverride) {
+            return NextResponse.json(closingFlowOverride);
+        }
+
+        const broadQuestionOverride = getCpxBroadQuestionOverride(messages);
+        if (broadQuestionOverride) {
+            return NextResponse.json(broadQuestionOverride);
+        }
+
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) {
             return NextResponse.json(
@@ -42,11 +56,7 @@ export async function POST(request: NextRequest) {
         // System message includes the scenario and instructions
         const systemMessage: ChatMessage = {
             role: 'system',
-            content: `당신은 환자 역할을 하는 AI입니다. 다음 시나리오와 지시사항을 따라 대화하세요:\n\n${scenario}\n\n중요: 
-- 환자로서 자연스럽게 대답하세요
-- 시나리오에 명시된 정보만 제공하세요
-- 의사가 질문하지 않은 정보는 자발적으로 제공하지 마세요
-- 시나리오에 약속된 마지막 대화가 끝나면 "대화 종료"라고 명시하세요`
+            content: buildCpxChatSystemPrompt(scenario)
         };
 
         // Convert user messages to ChatGPT format
@@ -69,7 +79,7 @@ export async function POST(request: NextRequest) {
                 model: 'gpt-4o-mini',
                 messages: chatMessages,
                 temperature: 0.7,
-                max_tokens: 1000,
+                max_tokens: getCpxChatMaxTokens(),
             }),
         });
 
@@ -86,7 +96,8 @@ export async function POST(request: NextRequest) {
         const assistantMessage = data.choices[0]?.message?.content || '';
 
         // Check if conversation should end
-        const isEnded = assistantMessage.includes('대화 종료') || 
+        const isEnded = assistantMessage.includes(CPX_FINAL_CLOSING_MESSAGE) ||
+                       assistantMessage.includes('대화 종료') ||
                        assistantMessage.toLowerCase().includes('conversation ended');
 
         return NextResponse.json({

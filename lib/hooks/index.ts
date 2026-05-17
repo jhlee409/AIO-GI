@@ -10,6 +10,7 @@ export { useUserProfile, type UserInfo, type UseUserProfileReturn } from './useU
 export { useApi, type UseApiOptions, type UseApiReturn } from './useApi';
 export { useLectureList, type UseLectureListReturn, type LectureItem } from './useLectureList';
 export { useUsers, type UseUsersReturn, type User } from './useUsers';
+export { useCpxCaseFlow } from './useCpxCaseFlow';
 export { useCpxChat, type UseCpxChatOptions, type UseCpxChatReturn, type ChatMessage } from './useCpxChat';
 
 // File processing hooks

@@ -1,0 +1,27 @@
+# Firebase deploy packaging should not include local build outputs, caches, or secrets.
+.git
+.git/**
+.firebase
+.firebase/**
+.next
+.next/**
+node_modules
+node_modules/**
+
+# Local environment files must stay out of deployed function packages.
+.env
+.env.*
+!.env.example
+
+# Local logs and generated diagnostics.
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Tests are useful locally but should not be uploaded with the runtime package.
+tests
+tests/**
+coverage
+coverage/**

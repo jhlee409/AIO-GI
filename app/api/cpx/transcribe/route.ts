@@ -8,6 +8,7 @@ import {
     getSafeAudioFileName,
     isSupportedAudioMimeType,
 } from '@/lib/cpx-stt';
+import { getStructuredCpxScenario } from '@/lib/cpx-scenario-registry';
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
@@ -23,6 +24,9 @@ export async function POST(request: NextRequest) {
 
         const formData = await request.formData();
         const audio = formData.get('audio');
+        const caseId = typeof formData.get('caseId') === 'string'
+            ? String(formData.get('caseId')).trim()
+            : '';
 
         if (!(audio instanceof File)) {
             return NextResponse.json(
@@ -56,7 +60,7 @@ export async function POST(request: NextRequest) {
         openAiFormData.append('file', audio, audio.name || getSafeAudioFileName(audio.type));
         openAiFormData.append('model', getCpxSttModel());
         openAiFormData.append('language', 'ko');
-        openAiFormData.append('prompt', buildCpxSttPrompt());
+        openAiFormData.append('prompt', buildCpxSttPrompt(getStructuredCpxScenario(caseId)));
         openAiFormData.append('response_format', 'json');
         openAiFormData.append('temperature', '0');
 

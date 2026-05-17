@@ -1,0 +1,403 @@
+{
+  "caseId": "cpx_10",
+  "title": "CPX_10_epigastric_pain",
+  "chiefComplaint": "윗배가 아파서 병원을 방문하게 되었습니다.",
+  "patientProfile": {
+    "sex": "M",
+    "age": 72
+  },
+  "ttsProfile": {
+    "voice": "onyx",
+    "speed": 1.3,
+    "instructions": "70대 한국 남성 환자처럼 한국어로 말합니다. 오래 지속되는 윗배 통증 때문에 지치고 걱정되는 느낌은 있으나 차분한 존댓말을 유지합니다. 목소리는 고령 남성처럼 낮고 자연스럽게 하며 과장되지 않게 합니다."
+  },
+  "openingAnswer": "선생님 처음 뵙겠습니다. 잘 부탁드리겠습니다.",
+  "historyItems": [
+    {
+      "category": "chief_complaint",
+      "keywords": ["윗배", "아파", "방문", "주호소"],
+      "answer": "윗배가 아파서 병원을 방문하게 되었습니다."
+    },
+    {
+      "category": "pain_onset",
+      "keywords": ["4개월", "시작", "언제부터"],
+      "answer": "윗배 통증은 4개월 전부터 시작되었습니다."
+    },
+    {
+      "category": "new_symptom",
+      "keywords": ["이전", "없던", "처음"],
+      "answer": "이 통증은 그 이전에는 없던 증상입니다."
+    },
+    {
+      "category": "pain_location",
+      "keywords": ["위치", "부위", "넓어", "명치"],
+      "answer": "아픈 부위가 넓어 딱 짚기 어렵지만 명치 부근입니다."
+    },
+    {
+      "category": "pain_severity",
+      "keywords": ["잠", "깨", "못 잘", "정도", "심해"],
+      "answer": "통증 때문에 잠을 깨고 이후로 못 잘 정도로 심합니다."
+    },
+    {
+      "category": "pain_severity_nrs",
+      "keywords": ["통증 점수", "10점", "얼마나 아", "강도"],
+      "answer": "심할 때는 10점 만점에 7-8점 정도로 일이 손에 안 잡힐 정도입니다."
+    },
+    {
+      "category": "pain_character",
+      "keywords": ["둔한 칼", "찌르", "양상", "표현"],
+      "answer": "둔한 칼로 은근히 찌르는 것처럼 아픕니다."
+    },
+    {
+      "category": "pain_migration",
+      "keywords": ["이동", "옮겨"],
+      "answer": "아픈 부위가 이동하지는 않습니다."
+    },
+    {
+      "category": "back_pain_radiation",
+      "keywords": ["등", "등쪽", "같이 아픈", "방사"],
+      "answer": "윗배가 아플 때 등쪽도 같이 아픈 경우가 많습니다."
+    },
+    {
+      "category": "pain_radiation_lateral",
+      "keywords": ["옆구리", "왼쪽 옆구리", "측면"],
+      "answer": "주로 등 쪽으로 뻗치고 가끔 왼쪽 옆구리까지 묵직한 느낌이 있습니다."
+    },
+    {
+      "category": "pain_duration",
+      "keywords": ["몇 시간", "지속", "기복", "호전"],
+      "answer": "한 번 시작하면 몇 시간 동안 기복 없이 아프다가 호전됩니다."
+    },
+    {
+      "category": "nocturnal_worsening",
+      "keywords": ["낮", "밤", "심해", "잠"],
+      "answer": "낮에도 아프지만 주로 밤에 심해져 잠을 잘 못 잡니다."
+    },
+    {
+      "category": "daily_pain",
+      "keywords": ["매일", "안 아픈 날", "빈도"],
+      "answer": "매일 아프고 안 아픈 날이 없습니다."
+    },
+    {
+      "category": "food_stress_not_aggravating",
+      "keywords": ["자극적", "음식", "스트레스", "악화"],
+      "answer": "자극적인 음식이나 스트레스로 통증이 악화되는 것 같지는 않습니다."
+    },
+    {
+      "category": "fatty_food_intolerance",
+      "keywords": ["기름진", "고기", "튀김", "지방"],
+      "answer": "기름진 음식을 먹으면 속이 더 답답하고 통증이 약간 더 심해지는 느낌이 있습니다."
+    },
+    {
+      "category": "alcohol_pain_relation",
+      "keywords": ["술 마신 후", "음주 후 통증"],
+      "answer": "최근에는 통증이 심해져서 술을 거의 못 마시고 있고, 어쩌다 마실 때는 다음 날 통증이 더 심한 듯합니다."
+    },
+    {
+      "category": "heat_warm_pack_effect",
+      "keywords": ["찜질", "따뜻한 물", "온찜질"],
+      "answer": "배에 따뜻한 찜질을 해도 통증이 크게 좋아지지는 않습니다."
+    },
+    {
+      "category": "positional_aggravation_relief",
+      "keywords": ["과식", "뒤로 젖히", "바로 누우", "웅크리", "자세"],
+      "answer": "과식하거나 뒤로 젖히거나 바로 누우면 심해지고, 웅크리면 조금 나아집니다."
+    },
+    {
+      "category": "gastritis_medication_no_effect",
+      "keywords": ["위염", "의원", "약", "효과"],
+      "answer": "위염이라고 의원에서 약을 몇 번 바꿔 먹었지만 효과가 없었습니다."
+    },
+    {
+      "category": "analgesic_response",
+      "keywords": ["진통제 효과", "타이레놀", "약국 진통제"],
+      "answer": "약국에서 사 먹은 진통제를 한두 번 먹어 봤지만 효과가 별로 없었습니다."
+    },
+    {
+      "category": "progressive_worsening",
+      "keywords": ["처음", "심하지", "조금씩", "심해"],
+      "answer": "통증이 처음에는 심하지 않았는데 조금씩 심해지고 있습니다."
+    },
+    {
+      "category": "appetite_loss",
+      "keywords": ["입맛", "식욕", "배고픈", "통증 후"],
+      "answer": "통증이 있고 나서는 입맛이 점점 없어져 배고픈지도 모르겠습니다."
+    },
+    {
+      "category": "appetite_loss_pattern_quality",
+      "keywords": ["식욕 자체", "음식 보면", "배고픔"],
+      "answer": "음식을 봐도 먹고 싶은 마음이 잘 안 들고 배고픈 느낌 자체가 잘 안 듭니다."
+    },
+    {
+      "category": "food_intake_quantity",
+      "keywords": ["식사량", "얼마나 먹", "한 끼"],
+      "answer": "식사량이 평소의 절반 정도로 줄었습니다."
+    },
+    {
+      "category": "weight_loss",
+      "keywords": ["체중", "4개월", "6 kg", "감소"],
+      "answer": "최근 4개월 동안 체중이 6kg이나 감소했습니다."
+    },
+    {
+      "category": "muscle_wasting_weakness",
+      "keywords": ["근육 빠짐", "팔다리 가늘", "기운 빠"],
+      "answer": "팔다리에 살이 빠진 느낌이 있고 평소보다 기운이 없습니다."
+    },
+    {
+      "category": "steatorrhea_oily_stool",
+      "keywords": ["지방변", "기름변", "둥둥", "변기에 뜨", "기름기"],
+      "answer": "최근 변이 평소보다 기름지고 변기에 잘 안 내려가는 느낌이 가끔 있습니다."
+    },
+    {
+      "category": "pruritus_subclinical",
+      "keywords": ["가렵", "소양감", "피부 가려움"],
+      "answer": "최근 들어 등이나 팔에 이유 없이 가려운 느낌이 가끔 있습니다."
+    },
+    {
+      "category": "hyperglycemia_symptoms_recent",
+      "keywords": ["갈증", "다뇨", "다음", "최근 당 조절"],
+      "answer": "최근 갈증이 늘고 소변을 자주 보는 느낌이 있어서 당이 다시 올라간 게 아닌가 걱정됩니다."
+    },
+    {
+      "category": "stool_frequency_change",
+      "keywords": ["변 횟수", "배변 빈도"],
+      "answer": "변 보는 횟수는 평소와 비슷합니다."
+    },
+    {
+      "category": "sleep_disturbance_cause",
+      "keywords": ["수면 원인", "왜 못 자", "잠 못 자는 이유"],
+      "answer": "통증 때문에 잠을 못 자고, 잠을 못 자서 낮에도 늘 피곤합니다."
+    },
+    {
+      "category": "daily_life_impact",
+      "keywords": ["일상생활", "외출", "지장", "활동"],
+      "answer": "통증과 체중 감소 때문에 외출이 거의 줄고 누워 있는 시간이 많아졌습니다."
+    },
+    {
+      "category": "cancer_worry_explicit",
+      "keywords": ["암 걱정", "큰 병", "심각한 병"],
+      "answer": "체중이 빠지고 통증이 안 좋아져서 혹시 큰 병이 아닐까 걱정됩니다."
+    },
+    {
+      "category": "no_obvious_trigger",
+      "keywords": ["원인", "계기", "일"],
+      "answer": "이 통증의 원인이나 계기가 될 만한 일은 없었습니다."
+    }
+  ],
+  "negativeFindings": [
+    {
+      "category": "other_abdominal_and_bowel_symptoms",
+      "keywords": ["다른 부위", "설사", "변비", "혈변", "흑변"],
+      "answer": "복부의 다른 부위 통증은 없고 설사, 변비, 혈변, 흑변도 없었습니다."
+    },
+    {
+      "category": "stool_caliber_change",
+      "keywords": ["변 굵기", "가늘", "연필"],
+      "answer": "변 굵기가 가늘어졌다고 느낀 적은 없습니다."
+    },
+    {
+      "category": "mucus_in_stool",
+      "keywords": ["점액", "콧물 같은", "끈끈"],
+      "answer": "변에 점액이 섞여 나온 적은 없습니다."
+    },
+    {
+      "category": "hematemesis_specific",
+      "keywords": ["피 토", "토혈", "선홍색 토"],
+      "answer": "피를 토하거나 한 적은 없습니다."
+    },
+    {
+      "category": "palpable_mass_self",
+      "keywords": ["배에 만져", "혹", "덩어리"],
+      "answer": "배를 만졌을 때 새로 만져지는 혹이나 덩어리는 본 적 없습니다."
+    },
+    {
+      "category": "supraclavicular_node_self",
+      "keywords": ["목 옆", "쇄골 위", "림프절"],
+      "answer": "목 옆이나 쇄골 위에 새로 만져지는 혹은 없습니다."
+    },
+    {
+      "category": "anemia_symptoms",
+      "keywords": ["어지럽", "두근", "창백"],
+      "answer": "어지럽거나 가슴이 두근거리는 증상은 특별히 없습니다."
+    },
+    {
+      "category": "jaundice",
+      "keywords": ["피부색", "눈 흰자위", "소변색", "대변색", "황달"],
+      "answer": "피부색, 눈 흰자위 색, 소변색과 대변색은 정상이고 황달은 없습니다."
+    },
+    {
+      "category": "associated_symptoms",
+      "keywords": ["열", "오한", "부종", "호흡곤란", "가슴 통증"],
+      "answer": "열, 오한, 부종, 호흡곤란, 가슴 통증 같은 다른 증상은 없습니다."
+    },
+    {
+      "category": "migratory_thrombophlebitis",
+      "keywords": ["혈관 따라 통증", "혈관 단단", "정맥염"],
+      "answer": "팔이나 다리 혈관을 따라 단단해지거나 빨갛게 부어오른 적은 없습니다."
+    },
+    {
+      "category": "dvt_leg_symptoms",
+      "keywords": ["다리 부종", "종아리 통증", "혈전"],
+      "answer": "다리가 붓거나 종아리가 새로 아픈 증상은 없었습니다."
+    },
+    {
+      "category": "easy_bruising_bleeding",
+      "keywords": ["멍", "쉽게 멍", "코피", "잇몸 출혈"],
+      "answer": "쉽게 멍들거나 코피·잇몸 출혈은 없습니다."
+    },
+    {
+      "category": "ankle_edema_self",
+      "keywords": ["발목 부", "다리 부종", "발 부종"],
+      "answer": "다리나 발목이 붓는 증상은 없습니다."
+    },
+    {
+      "category": "mood_depression_screen",
+      "keywords": ["우울", "기분", "의욕"],
+      "answer": "몸이 안 좋아서 답답하긴 하지만 일부러 식사를 안 한다거나 우울하다고 느끼지는 않습니다."
+    },
+    {
+      "category": "other_medical_diseases",
+      "keywords": ["간질환", "담도", "대장", "고혈압", "심장", "폐", "갑상선", "알레르기"],
+      "answer": "간질환, 담도 질환, 대장 질환, 고혈압, 심장질환, 폐질환, 갑상선 질환, 알레르기 질환은 없습니다."
+    }
+  ],
+  "medications": [
+    {
+      "category": "diabetes_medication",
+      "keywords": ["당뇨병", "당뇨약", "몇 년"],
+      "answer": "당뇨병을 진단받아 몇 년 동안 당뇨약을 복용하고 있습니다."
+    },
+    {
+      "category": "no_analgesics_or_aspirin",
+      "keywords": ["진통제", "아스피린", "당뇨약 외"],
+      "answer": "당뇨약 외에 진통제나 아스피린 종류의 약은 복용하지 않았습니다."
+    },
+    {
+      "category": "ppi_h2_trial_detail",
+      "keywords": ["위산 억제제", "PPI", "약 이름"],
+      "answer": "의원에서 위염 약을 바꾸며 처방받았는데 정확한 약 이름은 잘 모르겠습니다."
+    },
+    {
+      "category": "herbal_supplements_recent",
+      "keywords": ["한약", "건강식품", "보조제"],
+      "answer": "한약이나 건강식품은 따로 먹지 않고 있습니다."
+    }
+  ],
+  "pastHistory": [
+    {
+      "category": "diabetes",
+      "keywords": ["당뇨병", "진단", "몇 년"],
+      "answer": "당뇨병을 진단받은 지 몇 년 되었습니다."
+    },
+    {
+      "category": "diabetes_diagnosis_timing",
+      "keywords": ["당뇨 진단 시점", "몇 년 전", "당뇨 시작"],
+      "answer": "당뇨는 2년쯤 전에 진단받았습니다."
+    },
+    {
+      "category": "diabetes_presentation_at_diagnosis",
+      "keywords": ["당뇨 진단 당시", "처음 알게", "당뇨 증상"],
+      "answer": "건강검진에서 당이 높다고 해서 발견되었고, 그 무렵 체중도 조금 빠지기 시작했습니다."
+    },
+    {
+      "category": "diabetes_family_history",
+      "keywords": ["가족 당뇨", "당뇨 가족"],
+      "answer": "가족 중에 당뇨를 앓은 사람은 따로 없습니다."
+    },
+    {
+      "category": "diabetes_recent_control_change",
+      "keywords": ["당 조절", "혈당 변화", "약 늘", "당 잘 안 잡"],
+      "answer": "최근 4개월 사이 혈당이 잘 조절되지 않아 약을 한 번 늘렸습니다."
+    },
+    {
+      "category": "premorbid_body_habitus",
+      "keywords": ["원래 체형", "비만", "마른 편", "체중 이력"],
+      "answer": "원래는 보통 체형이었고 비만은 아니었습니다."
+    },
+    {
+      "category": "prior_acute_pancreatitis",
+      "keywords": ["급성 췌장염", "예전에 췌장", "췌장으로 입원"],
+      "answer": "예전에 급성 췌장염으로 입원한 적은 없습니다."
+    },
+    {
+      "category": "ercp_history",
+      "keywords": ["ERCP", "내시경 췌장", "담관 시술"],
+      "answer": "내시경으로 췌장이나 담관에 시술을 받은 적은 없습니다."
+    },
+    {
+      "category": "prior_pancreatic_imaging_finding",
+      "keywords": ["췌장 영상", "췌장 이상", "석회화"],
+      "answer": "췌장에 이상이 있다거나 석회가 있다는 이야기를 들은 적은 없습니다."
+    },
+    {
+      "category": "abdominal_surgery",
+      "keywords": ["복부 수술", "수술"],
+      "answer": "복부 수술을 받은 적은 없습니다."
+    },
+    {
+      "category": "last_checkup",
+      "keywords": ["종합 검진", "3년", "위내시경", "대장 내시경", "복부 초음파", "당"],
+      "answer": "3년 전 종합검진에서 위내시경, 대장내시경, 복부초음파를 받았고 당이 높다는 것 외에는 다른 이야기가 없었습니다."
+    }
+  ],
+  "socialHistory": [
+    {
+      "category": "smoking",
+      "keywords": ["담배", "흡연", "수십년", "한 갑", "한 갑 반"],
+      "answer": "담배는 수십 년간 매일 한 갑에서 한 갑 반을 피웠습니다."
+    },
+    {
+      "category": "alcohol",
+      "keywords": ["술", "음주", "수십년", "3-4번", "소주", "2병"],
+      "answer": "술은 수십 년간 일주일에 3-4번 소주 2병 정도 마셨습니다."
+    },
+    {
+      "category": "occupational_chemical_exposure",
+      "keywords": ["직업", "화학 물질", "농약", "공장", "유해 물질"],
+      "answer": "은퇴 전에는 사무직으로 일했고 특별히 화학 물질에 노출된 일은 없었습니다."
+    }
+  ],
+  "examHistory": [
+    {
+      "category": "family_history",
+      "keywords": ["가족", "가족력", "건강"],
+      "answer": "가족 중 병을 앓고 있는 가족은 없이 비교적 건강합니다."
+    },
+    {
+      "category": "family_pancreatic_cancer",
+      "keywords": ["가족 췌장암", "췌장암 친척"],
+      "answer": "가족 중에 췌장암을 앓은 사람은 없습니다."
+    },
+    {
+      "category": "family_breast_ovarian_cancer",
+      "keywords": ["가족 유방암", "난소암"],
+      "answer": "가족 중에 유방암이나 난소암을 앓은 분은 없습니다."
+    },
+    {
+      "category": "family_colon_cancer",
+      "keywords": ["가족 대장암", "직장암"],
+      "answer": "가족 중에 대장암을 진단받은 사람은 없습니다."
+    },
+    {
+      "category": "family_pancreatic_disease",
+      "keywords": ["가족 췌장 질환", "가족 췌장염"],
+      "answer": "가족 중에 췌장 질환을 앓은 사람은 들은 적 없습니다."
+    }
+  ],
+  "responseRules": [
+    "환자의 입장에서만 대답합니다.",
+    "clinical history에 있는 사실만 사용합니다.",
+    "묻지 않은 정보는 먼저 말하지 않습니다.",
+    "사용자가 명시적으로 물어본 항목에 대해서만 답합니다.",
+    "물어본 항목과 관련되어 있더라도, 사용자가 직접 묻지 않은 관련된 사항까지 덧붙이지 않습니다.",
+    "사용자가 어디가 불편해서 왔는지, 무엇을 도와드릴지, 방문 이유나 주된 증상을 물으면 주호소만 답합니다.",
+    "한 번에 한 항목만 답하고, 너무 포괄적인 질문이나 넓은 범위의 설명 요청에는 '한 가지씩 물어봐 주세요.'라고만 답합니다. 예: '그 때 상황을 다 설명해 주세요', '처음부터 끝까지 자세히 말해 주세요', '전체적으로 알려 주세요'.",
+    "가능하면 짧은 한국어 존댓말 한 문장으로 답합니다.",
+    "자료에 없는 증상에 대해 물으면, 건강한 사람의 평범한 일상생활에 준해 특별한 이상은 없었다고 자연스럽게 답합니다. 단, 검사 결과, 진단명, 약물, 과거력 같은 의학적 사실은 새로 지어내지 말고 잘 모르겠거나 들은 적 없다고 답합니다."
+  ],
+  "closingQuestions": [
+    "선생님, 선생님은 어떤 질환을 의심하고 계시나요? 저에게 심각한 병이 생긴 건가요?",
+    "선생님. 앞으로 제가 받게 될 검사는 무엇인가요?"
+  ],
+  "endCondition": "의사가 인터뷰나 문진을 끝내겠다는 취지로 말하면 closingQuestions의 질문을 한 번에 하나씩 순서대로 묻고, 두 번째 질문에 대한 답변을 들은 뒤 '알겠습니다. 감사합니다. 선생님.'이라고 말하고 종결합니다."
+}

@@ -4,6 +4,12 @@ export interface CpxFactItem {
     answer: string;
 }
 
+export interface CpxScenarioTtsProfile {
+    voice?: string;
+    speed?: number;
+    instructions?: string;
+}
+
 export interface StructuredCpxScenario {
     caseId: string;
     title: string;
@@ -12,6 +18,7 @@ export interface StructuredCpxScenario {
         sex?: string;
         age?: number;
     };
+    ttsProfile?: CpxScenarioTtsProfile;
     openingAnswer: string;
     historyItems: CpxFactItem[];
     negativeFindings: CpxFactItem[];
@@ -20,6 +27,7 @@ export interface StructuredCpxScenario {
     socialHistory: CpxFactItem[];
     examHistory: CpxFactItem[];
     responseRules: string[];
+    closingQuestions?: string[];
     endCondition: string;
 }
 
@@ -73,6 +81,9 @@ export function formatStructuredCpxScenario(scenario: StructuredCpxScenario): st
         '## 응답 규칙',
         ...scenario.responseRules.map(rule => `- ${rule}`),
         '',
+        scenario.closingQuestions?.length ? '## 종료 후 환자 질문' : '',
+        ...(scenario.closingQuestions || []).map((question, index) => `- ${index + 1}. ${question}`),
+        scenario.closingQuestions?.length ? '' : '',
         '## 종료 조건',
         `- ${scenario.endCondition}`,
     ].filter(line => line !== '').join('\n');

@@ -19,6 +19,7 @@ const sandbox = {
 vm.runInNewContext(compiled.outputText, sandbox);
 const {
   buildCpxSttPrompt,
+  collectCpxSttKeywords,
   getCpxSttModel,
   getSafeAudioFileName,
   isSupportedAudioMimeType,
@@ -39,3 +40,26 @@ const prompt = buildCpxSttPrompt();
 assert.match(prompt, /한국어/);
 assert.match(prompt, /혈변/);
 assert.match(prompt, /연하곤란/);
+
+const scenario = {
+  title: 'CPX_05_abdominal_pain',
+  chiefComplaint: '배가 너무 아파 병원을 방문하게 되었습니다.',
+  historyItems: [
+    { keywords: ['오른쪽 윗배', '삼겹살', '통증'] },
+    { keywords: ['삼겹살', '우측 어깨'] },
+  ],
+  negativeFindings: [
+    { keywords: ['황달', '흑변'] },
+  ],
+};
+
+assert.equal(
+  JSON.stringify(collectCpxSttKeywords(scenario).slice(0, 7)),
+  JSON.stringify(['CPX_05_abdominal_pain', '배가 너무 아파 병원을 방문하게 되었습니다.', '오른쪽 윗배', '삼겹살', '통증', '우측 어깨', '황달'])
+);
+
+const scenarioPrompt = buildCpxSttPrompt(scenario);
+assert.match(scenarioPrompt, /현재 선택된 증례 관련 표현/);
+assert.match(scenarioPrompt, /CPX_05_abdominal_pain/);
+assert.match(scenarioPrompt, /오른쪽 윗배/);
+assert.match(scenarioPrompt, /삼겹살/);
