@@ -85,6 +85,7 @@ interface ChatMessage {
 const SILENCE_AUTO_STOP_MS = 1800;
 const MIN_RECORDING_BEFORE_AUTO_STOP_MS = 900;
 const RECORDING_VOLUME_THRESHOLD = 0.025;
+const MAX_INITIAL_SILENCE_MS = 5000;
 
 export default function CpxPage() {
     const { user } = useAuth();
@@ -110,6 +111,7 @@ export default function CpxPage() {
     const [isRecording, setIsRecording] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [isRecordingSupported, setIsRecordingSupported] = useState(false);
+    const [recordingNotice, setRecordingNotice] = useState('');
     const [ttsLoadingMessageIndex, setTtsLoadingMessageIndex] = useState<number | null>(null);
     const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
     const [patientAudioNotice, setPatientAudioNotice] = useState('');
@@ -202,6 +204,11 @@ export default function CpxPage() {
     };
 
     const transcribeAudioBlob = async (audioBlob: Blob) => {
+        if (!hasDetectedSpeechRef.current) {
+            setRecordingNotice('음성이 감지되지 않았습니다. 마이크 버튼을 누르고 질문을 말씀해주세요.');
+            return;
+        }
+
         if (audioBlob.size === 0) {
             alert('녹음된 음성이 없습니다. 다시 시도해주세요.');
             return;
@@ -316,6 +323,15 @@ export default function CpxPage() {
                 return;
             }
 
+            if (
+                !hasDetectedSpeechRef.current &&
+                now - recordingStartedAtRef.current > MAX_INITIAL_SILENCE_MS &&
+                mediaRecorderRef.current?.state === 'recording'
+            ) {
+                stopRecording();
+                return;
+            }
+
             silenceMonitorFrameRef.current = requestAnimationFrame(monitor);
         };
 
@@ -336,6 +352,7 @@ export default function CpxPage() {
 
         try {
             audioChunksRef.current = [];
+            setRecordingNotice('');
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -1144,6 +1161,12 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 <div className="mt-2 text-sm text-blue-600 flex items-center gap-2">
                                                     <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
                                                     음성을 텍스트로 변환 중입니다.
+                                                </div>
+                                            )}
+                                            {recordingNotice && !isRecording && !isTranscribing && (
+                                                <div className="mt-2 text-sm text-amber-600 flex items-center gap-2">
+                                                    <div className="w-2 h-2 bg-amber-600 rounded-full"></div>
+                                                    {recordingNotice}
                                                 </div>
                                             )}
                                         </div>
