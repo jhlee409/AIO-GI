@@ -63,7 +63,8 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     const dxEgdLectureTitles = [
         'Complication_Sedation', 'Description_Impression', 'Photo_Report',
         'Biopsy_NBI', 'Stomach_benign', 'Stomach_malignant', 'Duodenum',
-        'Lx_Phx_Esophagus', 'SET'
+        'Lx_Phx_Esophagus', 'SET',
+        'Bx_or_no_Bx'
     ];
     const isDxEgdLectureCategory = (category === 'advanced-f1' || category?.includes('Advanced course for F1')) &&
                                    videoTitle && dxEgdLectureTitles.some(title => videoTitle.includes(title));
@@ -95,11 +96,21 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     // trackWatchTime과 saveFinalWatchTime을 ref로 저장하여 useEffect dependency 문제 방지
     const trackWatchTimeRef = useRef(trackWatchTime);
     const saveFinalWatchTimeRef = useRef(saveFinalWatchTime);
-    
+
+    // 한 세션(= 같은 videoUrl 마운트 사이클)당 'final' 저장을 1회로 제한하기 위한 플래그.
+    // Why: X 버튼·메뉴 변경·자연 종료·언마운트 cleanup 등 여러 경로가 모두 저장을 시도하여
+    // 같은 watchedTime으로 'final' 레코드가 중복 생성되는 문제를 막는다.
+    const hasSavedFinalRef = useRef(false);
+
     useEffect(() => {
         trackWatchTimeRef.current = trackWatchTime;
         saveFinalWatchTimeRef.current = saveFinalWatchTime;
     }, [trackWatchTime, saveFinalWatchTime]);
+
+    // 새 동영상이 로드되면(즉 새 세션이 시작되면) 저장 플래그 리셋
+    useEffect(() => {
+        hasSavedFinalRef.current = false;
+    }, [videoUrl]);
 
     // 부모 컴포넌트에서 saveWatchTime을 호출할 수 있도록 ref 노출
     useImperativeHandle(ref, () => ({
@@ -113,6 +124,10 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             });
             
             if (isDxEgdLectureCategory) {
+                if (hasSavedFinalRef.current) {
+                    console.log('[CustomVideoPlayer] Already saved this session, skipping ref save');
+                    return;
+                }
                 const video = videoRef.current;
                 if (video && saveFinalWatchTimeRef.current) {
                     const finalTime = video.currentTime;
@@ -123,6 +138,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                         percentage: finalDuration > 0 ? (finalTime / finalDuration * 100).toFixed(2) + '%' : 'N/A'
                     });
                     if (!isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0) {
+                        hasSavedFinalRef.current = true;
                         await saveFinalWatchTimeRef.current(finalTime, finalDuration);
                     } else {
                         console.warn('[CustomVideoPlayer] Invalid time values in ref save:', {
@@ -230,7 +246,8 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             }
             
             // 'Dx EGD 실전 강의' 카테고리인 경우 동영상 종료 시 최종 시청 시간 저장
-            if (isDxEgdLectureCategory && saveFinalWatchTimeRef.current && !isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0) {
+            if (isDxEgdLectureCategory && saveFinalWatchTimeRef.current && !isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0 && !hasSavedFinalRef.current) {
+                hasSavedFinalRef.current = true;
                 saveFinalWatchTimeRef.current(finalTime, finalDuration);
             }
             
@@ -257,14 +274,21 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 category,
                 currentTime: video.currentTime,
                 duration: video.duration,
-                hasSaveFunction: !!saveFinalWatchTimeRef.current
+                hasSaveFunction: !!saveFinalWatchTimeRef.current,
+                alreadySaved: hasSavedFinalRef.current
             });
-            
+
+            if (hasSavedFinalRef.current) {
+                console.log('[CustomVideoPlayer] Already saved this session, skipping saveFinalTime');
+                return;
+            }
+
             if (isDxEgdLectureCategory && saveFinalWatchTimeRef.current) {
                 const finalTime = video.currentTime;
                 const finalDuration = video.duration;
-                
+
                 if (!isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0) {
+                    hasSavedFinalRef.current = true;
                     console.log('[CustomVideoPlayer] Calling saveFinalWatchTime:', {
                         finalTime,
                         finalDuration,

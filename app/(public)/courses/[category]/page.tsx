@@ -3384,7 +3384,7 @@ export default function CoursePage() {
                                                 userPosition={userProfile?.position}
                                                 userName={userProfile?.name}
                                                 userHospital={userProfile?.hospital}
-                                                videoTitle={selectedOtherLecture || undefined}
+                                                videoTitle={selectedOtherLecture === 'Bx.? or not?' ? 'Bx_or_no_Bx' : (selectedOtherLecture || undefined)}
                                                 category="Advanced course for F1"
                                                 onClose={() => {
                                                     setShowOtherLecture(false);

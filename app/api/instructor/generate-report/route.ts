@@ -521,18 +521,21 @@ export async function POST(request: NextRequest) {
             const dxEgdLectureTitles = [
                 'complication_sedation', 'description_impression', 'photo_report',
                 'biopsy_nbi', 'stomach_benign', 'stomach_malignant', 'duodenum',
-                'lx_phx_esophagus', 'set'
+                'lx_phx_esophagus', 'set', 'bx_or_no_bx'
             ];
             const lectureTitleLower = lectureTitle.toLowerCase().trim();
 
-            // 카테고리 매칭: 'advanced-f1', 'Advanced course for F1', 'Dx EGD 실전 강의' 모두 허용
+            // 카테고리 매칭: 'advanced-f1', 'Advanced course for F1', 'Dx EGD 실전 강의', 'other lecture' 모두 허용
+            // 'other lecture'는 Advanced course for F1의 하위 섹션으로, dxEgdLectureTitles 목록의 강의 제목과 함께 사용될 때만 추적됨
             const isAdvancedF1Category = categoryLower.includes('advanced course for f1') ||
                 categoryNormalized.includes('advanced course for f1') ||
                 categoryLower === 'advanced-f1' ||
                 categoryNormalized.includes('advanced-f1') ||
                 categoryLower.includes('dx egd 실전 강의') ||
                 categoryNormalized.includes('dx egd 실전 강의') ||
-                category.includes('Dx EGD 실전 강의');
+                category.includes('Dx EGD 실전 강의') ||
+                categoryLower.includes('other lecture') ||
+                categoryNormalized.includes('other lecture');
 
             // 강의 제목 매칭: 정확히 일치하거나 포함 관계 확인
             const isDxEgdLectureTitle = dxEgdLectureTitles.some(title => {

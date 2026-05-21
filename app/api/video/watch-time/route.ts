@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
         const shouldCreateLog = watchedTime >= threshold;
 
         if (action === 'update') {
-            // 'update'는 페이지 이동 시 최종 저장이므로, 각 시청 세션을 별도 레코드로 저장
-            // 리포트 생성 시 모든 세션의 %를 합산하기 위함
+            // 'update'는 종료(X/메뉴 변경/언마운트 등) 시 최종 저장이며, 각 시청 세션을 별도 레코드로 저장한다.
+            // 리포트 생성 시에는 calculateAccumulatedWatchTime에서 여러 세션 중 MAX % 만 반영한다.
             const finalData = {
                 email,
                 position: position || '',

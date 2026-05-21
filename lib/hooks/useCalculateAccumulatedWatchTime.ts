@@ -161,23 +161,27 @@ export async function calculateAccumulatedWatchTime(
                 recordsByKey.forEach((records, key) => {
                     if (records.length > 0) {
                         const duration = records[0].duration;
-                        let totalPercentage = 0;
+                        // MAX 방식: 여러 'final' 레코드 중 가장 높은 시청 %를 사용.
+                        // Why: 같은 동영상을 반복 재생할 때 SUM 방식은 같은 구간을 중복 카운트해
+                        //      실제로 보지 않은 분량까지 누적되는 문제가 있었음.
+                        let maxPercentage = 0;
                         let maxLastUpdated: Date | undefined;
 
                         records.forEach(record => {
                             if (record.duration > 0) {
                                 const sessionPercentage = (record.watchedTime / record.duration) * 100;
-                                totalPercentage += sessionPercentage;
+                                if (sessionPercentage > maxPercentage) {
+                                    maxPercentage = sessionPercentage;
+                                }
                             }
                             if (record.lastUpdated && (!maxLastUpdated || record.lastUpdated > maxLastUpdated)) {
                                 maxLastUpdated = record.lastUpdated;
                             }
                         });
 
-                        // Cap total percentage at 100%
-                        totalPercentage = Math.min(totalPercentage, 100);
+                        const totalPercentage = Math.min(maxPercentage, 100);
 
-                        console.log(`[calculateAccumulatedWatchTime] Key: "${key}", Records: ${records.length}, Total %: ${totalPercentage}%`);
+                        console.log(`[calculateAccumulatedWatchTime] Key: "${key}", Records: ${records.length}, Max %: ${totalPercentage}%`);
 
                         userWatchTimes.set(key, {
                             totalPercentage,
