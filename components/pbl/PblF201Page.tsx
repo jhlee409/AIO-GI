@@ -87,15 +87,15 @@ const conversationSteps: Record<number, ConversationStep> = {
     8: {
         step: 8,
         type: 'final',
-        content: '예 맞습니다. 그럼 이 환자에서 효과적인 표적항암제를 찾기 위해 내시경 조직 생검에 대해 추가로 요청할 면역화학염색 검사 다섯 가지는 다음과 같습니다.',
-        markers: ['c-ERB B2', 'PD-L1', 'EBV', 'MSI', 'Claudin 18'],
+        content: '예 맞습니다. 그럼 이 환자에서 효과적인 표적항암제를 찾기 위해 내시경 조직 생검에 대해 추가로 요청할 면역화학염색 검사 네 가지는 다음과 같습니다.',
+        markers: ['c-ERB B2', 'PD-L1', 'MSI', 'Claudin 18'],
         finalContent: '2024년 현재 우리나라에서 보험 적용을 받을 수 있는 위암 4기 표적치료 항암제는 HER2 양성일 경우 trastuzumab 혹은 herceptin, PD-L1 28-8의 CPS 값이 5이상일 경우 nivolumab 이렇게 두 가지입니다. 그럼 이 환자의 IHC report를 보여드릴까요?',
         buttonText: '예'
     },
     9: {
         step: 9,
         type: 'final_assignment',
-        content: '마지막으로 과제입니다. 제시되는 실제 환자의 IHC의 결과를 보여주는 병리 report에서 그 5가지 항목의 유무를 해석하고, 이 결과에 따라 사용되는 흔한 chemo regimen 한 가지를 약자로 기술하고, 이 치료를 받은 후 기대할 수 있는 기대 여명을 적어 PBS_amc_F2_01_이름.docx 파일로 제출해 주세요.<br><br>수고하셨습니다.'
+        content: '마지막으로 과제입니다. 제시되는 실제 환자의 IHC의 결과를 보여주는 병리 report에서 그 4가지 항목의 유무를 해석하고, 이 결과에 따라 사용되는 흔한 chemo regimen 한 가지를 약자로 기술하고, 이 치료를 받은 후 기대할 수 있는 기대 여명을 적어 PBS_amc_F2_01_이름.docx 파일로 제출해 주세요.<br><br>수고하셨습니다.'
     }
 };
 
