@@ -15,6 +15,50 @@ import * as fs from 'fs';
 /** Cloud Run / 호스팅에서 긴 리포트 생성 허용 (플랫폼이 무시할 수 있음) */
 export const maxDuration = 300;
 
+const REPORT_HEADER_ROW_COUNT = 3;
+const NAME_HEADER_ROW_INDEX = 2;
+
+function getUserName(user: any): string {
+    return String(user?.['이름'] || user?.['성명'] || user?.['name'] || '').trim();
+}
+
+function getUserEmail(user: any): string {
+    return String(user?.['이메일'] || user?.['email'] || user?.['Email'] || '').trim();
+}
+
+function getUserHospital(user: any): string {
+    return String(user?.['병원'] || user?.['병원명'] || user?.['hospital'] || '').trim();
+}
+
+function getHospitalInitial(hospital: string): string {
+    const compactHospital = hospital.replace(/\s+/g, '').trim();
+    return compactHospital ? Array.from(compactHospital)[0] : '';
+}
+
+function normalizeIdentityValue(value: string): string {
+    return value.toLowerCase().replace(/\s+/g, '').trim();
+}
+
+function extractLogField(content: string | undefined, fieldName: string): string {
+    if (!content) return '';
+    const fieldPattern = new RegExp(`^${fieldName}\\s*:\\s*(.+)$`, 'im');
+    return fieldPattern.exec(content)?.[1]?.trim() || '';
+}
+
+function logIdentityMatchesUser(content: string | undefined, userEmail: string, userHospital: string): boolean {
+    const logEmail = extractLogField(content, 'Email');
+    if (logEmail && userEmail) {
+        return normalizeIdentityValue(logEmail) === normalizeIdentityValue(userEmail);
+    }
+
+    const logHospital = extractLogField(content, 'Hospital');
+    if (logHospital) {
+        return Boolean(userHospital) && normalizeIdentityValue(logHospital) === normalizeIdentityValue(userHospital);
+    }
+
+    return !logEmail;
+}
+
 export async function POST(request: NextRequest) {
     try {
         let requestBody;
@@ -312,6 +356,8 @@ export async function POST(request: NextRequest) {
         let egdLogFileNames: string[] = [];
         const regularLogFileMeta = new Map<string, Date>(); // fileName -> timeCreated (24시간 이내 변경 감지용)
         const egdLogFileMeta = new Map<string, Date>();
+        const regularLogFileText = new Map<string, string>(); // fileName -> log content (Email/Hospital 확인용)
+        const egdLogFileText = new Map<string, string>();
         let bucket;
 
         const HOURS_24_MS = 24 * 60 * 60 * 1000;
@@ -320,9 +366,11 @@ export async function POST(request: NextRequest) {
             const adminStorage = getAdminStorage();
             bucket = adminStorage.bucket();
 
-            const fetchFileMeta = async (files: Array<{ name: string; getMetadata: () => Promise<unknown> }>) => {
+            const fetchFileMeta = async (files: Array<{ name: string; getMetadata: () => Promise<unknown>; download: () => Promise<unknown> }>) => {
                 const results = await Promise.allSettled(files.map(f => f.getMetadata()));
+                const contentResults = await Promise.allSettled(files.map(f => f.download()));
                 const metaMap = new Map<string, Date>();
+                const textMap = new Map<string, string>();
                 const names: string[] = [];
                 files.forEach((file, i) => {
                     const fileName = file.name.split('/').pop() || file.name;
@@ -337,16 +385,25 @@ export async function POST(request: NextRequest) {
                             metaMap.set(fileName, new Date(timeCreated));
                         }
                     }
+                    const contentResult = contentResults[i];
+                    if (contentResult.status === 'fulfilled') {
+                        const res = contentResult.value as [unknown] | unknown;
+                        const downloaded = Array.isArray(res) ? res[0] : res;
+                        if (Buffer.isBuffer(downloaded)) {
+                            textMap.set(fileName, downloaded.toString('utf-8').replace(/^\uFEFF/, ''));
+                        }
+                    }
                 });
-                return { names, metaMap };
+                return { names, metaMap, textMap };
             };
 
             // Get files from regular log folder
             try {
                 const [regularFiles] = await bucket.getFiles({ prefix: 'log/' });
-                const { names, metaMap } = await fetchFileMeta(regularFiles as Array<{ name: string; getMetadata: () => Promise<unknown> }>);
+                const { names, metaMap, textMap } = await fetchFileMeta(regularFiles as Array<{ name: string; getMetadata: () => Promise<unknown>; download: () => Promise<unknown> }>);
                 regularLogFileNames = names.filter(n => n && n.length > 0);
                 metaMap.forEach((v, k) => regularLogFileMeta.set(k, v));
+                textMap.forEach((v, k) => regularLogFileText.set(k, v));
             } catch (regularError: any) {
                 console.error('Error getting regular log files:', regularError);
             }
@@ -354,9 +411,10 @@ export async function POST(request: NextRequest) {
             // Get files from EGD Lesion Dx log folder
             try {
                 const [egdFiles] = await bucket.getFiles({ prefix: 'log_EGD_Lesion_Dx/' });
-                const { names, metaMap } = await fetchFileMeta(egdFiles as Array<{ name: string; getMetadata: () => Promise<unknown> }>);
+                const { names, metaMap, textMap } = await fetchFileMeta(egdFiles as Array<{ name: string; getMetadata: () => Promise<unknown>; download: () => Promise<unknown> }>);
                 egdLogFileNames = names.filter(n => n && n.length > 0);
                 metaMap.forEach((v, k) => egdLogFileMeta.set(k, v));
+                textMap.forEach((v, k) => egdLogFileText.set(k, v));
             } catch (egdError: any) {
                 console.error('Error getting EGD log files:', egdError);
             }
@@ -437,27 +495,31 @@ export async function POST(request: NextRequest) {
         // Convert to JSON
         const data: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-        // 5. Fill user data (row 0: positions, row 1: names)
-        // Clear existing data from column C onwards in rows 0 and 1
-        for (let col = 2; col < (data[0]?.length || 0); col++) {
-            if (data[0]) data[0][col] = '';
-            if (data[1]) data[1][col] = '';
+        // 5. Fill user data (row 0: hospital initial, row 1: positions, row 2: names)
+        const hospitalRow = [...(data[0] || [])];
+        const positionRow = [...(data[0] || [])];
+        const nameRow = [...(data[1] || [])];
+        const widestHeaderLength = Math.max(hospitalRow.length, positionRow.length, nameRow.length);
+
+        hospitalRow[0] = '';
+        hospitalRow[1] = '소속';
+        positionRow[0] = data[0]?.[0] || '';
+        positionRow[1] = data[0]?.[1] || '';
+        nameRow[0] = data[1]?.[0] || '';
+        nameRow[1] = data[1]?.[1] || '';
+
+        // Clear existing user data from column C onwards in all report header rows.
+        for (let col = 2; col < widestHeaderLength; col++) {
+            hospitalRow[col] = '';
+            positionRow[col] = '';
+            nameRow[col] = '';
         }
 
-        // Fill positions in row 0 (index 0)
         users.forEach((user, index) => {
             const colIndex = 2 + index; // Start from column C
-            const position = user['직위'] || user['position'] || '';
-            if (!data[0]) data[0] = [];
-            data[0][colIndex] = position;
-        });
-
-        // Fill names in row 1 (index 1)
-        users.forEach((user, index) => {
-            const colIndex = 2 + index; // Start from column C
-            const name = user['이름'] || user['성명'] || user['name'] || '';
-            if (!data[1]) data[1] = [];
-            data[1][colIndex] = name;
+            hospitalRow[colIndex] = getHospitalInitial(getUserHospital(user));
+            positionRow[colIndex] = user['직위'] || user['position'] || '';
+            nameRow[colIndex] = getUserName(user);
         });
 
         // 3월 근무가 'no'인 F1/F2 사용자의 이름 셀 컬럼 인덱스 수집 (연한 복숭아색 배경용)
@@ -473,10 +535,8 @@ export async function POST(request: NextRequest) {
             }
         });
 
-        // 6. Fill lecture data starting from row 2 (index 2)
-        // We will reconstruct the rows from index 2 onwards based on selected lectures
-        // First, keep the header rows (0 and 1)
-        const newData = [data[0], data[1]];
+        // 6. Fill lecture data after the report header rows.
+        const newData = [hospitalRow, positionRow, nameRow];
 
         // Add lecture rows
         lectures.forEach((lecture) => {
@@ -514,7 +574,7 @@ export async function POST(request: NextRequest) {
         const isWithin24Hours = (d: Date | undefined) =>
             d && (now - d.getTime()) < HOURS_24_MS;
 
-        for (let row = 2; row < newData.length; row++) {
+        for (let row = REPORT_HEADER_ROW_COUNT; row < newData.length; row++) {
             const category = String(newData[row][0] || '').trim(); // A column (category)
             const lectureTitle = String(newData[row][1] || '').trim(); // B column (title)
             if (!lectureTitle) continue;
@@ -611,18 +671,21 @@ export async function POST(request: NextRequest) {
             // Select appropriate log file list and meta based on category
             const logFileNames = isEGDLesionDxRow ? egdLogFileNames : regularLogFileNames;
             const logFileMeta = isEGDLesionDxRow ? egdLogFileMeta : regularLogFileMeta;
+            const logFileText = isEGDLesionDxRow ? egdLogFileText : regularLogFileText;
 
-            for (let col = 2; col < newData[1].length; col++) {
+            for (let col = 2; col < newData[NAME_HEADER_ROW_INDEX].length; col++) {
                 // Only process if we have a user in this column
                 if (col - 2 >= users.length) break;
 
-                const userName = String(newData[1][col] || '').trim();
-                if (!userName) continue;
-
-                // Get user position from users array (for CPX matching)
                 const userIndex = col - 2;
                 const user = users[userIndex];
+                const userName = getUserName(user);
+                if (!userName) continue;
+
+                // Get user identity from users array (for CPX/log matching)
                 const userPosition = user ? String(user['직위'] || user['position'] || '').trim() : '';
+                const userEmail = getUserEmail(user);
+                const userHospital = getUserHospital(user);
 
                 // 강의제목이 코드 형식인지 확인 (예: A1, B1, B2, C1, C2, D2, F2 등)
                 const isCodeFormat = /^[A-Z]\d+$/i.test(lectureTitle.trim());
@@ -676,6 +739,9 @@ export async function POST(request: NextRequest) {
                         const fileNameLower = fileName.toLowerCase();
                         const lectureLower = lectureTitle.toLowerCase();
                         const userLower = userName.toLowerCase();
+                        if (!logIdentityMatchesUser(logFileText.get(fileName), userEmail, userHospital)) {
+                            return false;
+                        }
 
                         // 코드 형식인 경우: 마지막 부분만 매칭
                         if (isCodeFormat) {
@@ -702,6 +768,9 @@ export async function POST(request: NextRequest) {
                         const fileNameLower = fileName.toLowerCase();
                         const lectureLower = lectureTitle.toLowerCase();
                         const userLower = userName.toLowerCase();
+                        if (!logIdentityMatchesUser(logFileText.get(fileName), userEmail, userHospital)) {
+                            return false;
+                        }
 
                         // CPX 카테고리인 경우: CPX 케이스 번호로 매칭
                         if (isCPXRow) {
@@ -782,9 +851,6 @@ export async function POST(request: NextRequest) {
                     }) && (categoryLower.includes('advanced') || categoryLower.includes('f1')));
 
                     if (finalIsDxEgdLectureRow) {
-                        const user = users[col - 2];
-                        const userEmail = user['이메일'] || user['email'] || user['Email'] || '';
-
                         console.log(`[Dx EGD 실전 강의 매칭] Checking for user: ${userEmail}`);
                         console.log(`[Dx EGD 실전 강의 매칭] watchTimeMap.has(${userEmail}): ${watchTimeMap.has(userEmail)}`);
                         console.log(`[Dx EGD 실전 강의 매칭] All emails in watchTimeMap:`, Array.from(watchTimeMap.keys()));

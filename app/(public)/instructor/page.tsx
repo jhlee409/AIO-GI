@@ -274,10 +274,11 @@ export default function InstructorPage() {
     ) => {
         const recentlySet = new Set(recentlyChangedCells?.map(([r, c]) => `${r},${c}`) ?? []);
         const peachSet = new Set(peachBackgroundNameCols ?? []);
+        const reportHeaderRowCount = data[0]?.[1] === '소속' ? 3 : 2;
         let html = '<table style="border-collapse:collapse;table-layout:auto;width:max-content;min-width:100%">';
         // thead
         html += '<thead style="position:sticky;top:0;background:#f3f4f6;z-index:10">';
-        for (let r = 0; r < 2 && r < data.length; r++) {
+        for (let r = 0; r < reportHeaderRowCount && r < data.length; r++) {
             html += '<tr>';
             (data[r] || []).forEach((cell: any, ci: number) => {
                 const v = cell || '';
@@ -285,7 +286,7 @@ export default function InstructorPage() {
                 if (ci === 0) style += 'position:sticky;left:0;z-index:5;background:#f3f4f6;min-width:200px;width:200px;';
                 else if (ci === 1) style += 'position:sticky;left:200px;z-index:5;background:#f3f4f6;min-width:300px;width:300px;';
                 // 3월 근무가 no인 F1/F2 사용자 이름 셀: 연한 복숭아색
-                if (r === 1 && ci >= 2 && peachSet.has(ci)) {
+                if (r === reportHeaderRowCount - 1 && ci >= 2 && peachSet.has(ci)) {
                     style += 'background:#ffdab9;';
                 }
                 html += `<th style="${style}">${v}</th>`;
@@ -294,8 +295,8 @@ export default function InstructorPage() {
         }
         html += '</thead><tbody>';
         // tbody
-        data.slice(2).forEach((row: any[], rowIndex: number) => {
-            const actualRow = 2 + rowIndex;
+        data.slice(reportHeaderRowCount).forEach((row: any[], rowIndex: number) => {
+            const actualRow = reportHeaderRowCount + rowIndex;
             html += '<tr>';
             row.forEach((cell: any, ci: number) => {
                 const v = cell || '';
