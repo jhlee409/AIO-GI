@@ -20,7 +20,7 @@ import type { Bucket } from '@google-cloud/storage';
 const EMTL_ROI_BY_MODEL: Record<string, [number, number, number, number]> = {
     'CV 260': [230, 55, 595, 420],
     'CV 290': [171, 36, 581, 446],
-    'X1 660': [750, 0, 1830, 1080],
+    'mPAX': [750, 0, 1830, 1080],
 };
 
 export interface EmtJobData {
@@ -32,7 +32,7 @@ export interface EmtJobData {
     hospital: string;
     isAdmin?: boolean;  // 관리자 여부
     version?: string;   // EMT 버전 (EMT 또는 EMT-L)
-    endoscopeModel?: 'CV 260' | 'CV 290' | 'X1 660';  // EMT-L 시 내시경 모델(ROI)
+    endoscopeModel?: 'CV 260' | 'CV 290' | 'mPAX';  // EMT-L 시 내시경 모델(ROI)
 }
 
 export interface VisualizationFrame {
@@ -68,6 +68,7 @@ const EMT_RESULT_STORAGE_FOLDER = 'Simulator_training/EMT/EMT_result/';
 
 /** 직위-이름-EMT-{숫자타임스탬프}.{확장자} 형태의 합격 동영상만 매칭 (평가서 txt 등 제외) */
 const EMT_PASS_VIDEO_SUFFIX = /^\d+\.[a-zA-Z0-9]+$/;
+const EMT_UPLOADED_VIDEO_PATH_PATTERN = /^Simulator_training\/EMT\/EMT_result\/.+-EMT-\d+\.[a-zA-Z0-9]+$/;
 
 /**
  * 동일 사용자의 이전 EMT/EMT-L 합격 동영상(Storage 객체)을 삭제하고 현재 제출분만 남깁니다.
@@ -95,6 +96,36 @@ async function deletePreviousEmtPassVideosForUser(
         }
     } catch (error: any) {
         console.error(`[emt-processor:${jobId}] Error deleting previous EMT pass videos:`, {
+            message: error?.message,
+            stack: error?.stack?.substring(0, 500),
+        });
+    }
+}
+
+async function deleteUploadedEmtVideoIfSafe(
+    bucket: Bucket,
+    jobId: string,
+    videoPath: string,
+    reason: string
+): Promise<void> {
+    if (!videoPath || !EMT_UPLOADED_VIDEO_PATH_PATTERN.test(videoPath)) {
+        console.warn(`[emt-processor:${jobId}] Skip uploaded EMT video cleanup: unsafe path`, { videoPath, reason });
+        return;
+    }
+
+    try {
+        const videoFileRef = bucket.file(videoPath);
+        const [exists] = await videoFileRef.exists();
+        if (exists) {
+            await videoFileRef.delete();
+            console.log(`[emt-processor:${jobId}] Deleted uploaded EMT video from Firebase Storage`, { videoPath, reason });
+        } else {
+            console.log(`[emt-processor:${jobId}] Uploaded EMT video already absent, skipping cleanup`, { videoPath, reason });
+        }
+    } catch (error: any) {
+        console.error(`[emt-processor:${jobId}] Error cleaning up uploaded EMT video:`, {
+            videoPath,
+            reason,
             message: error?.message,
             stack: error?.stack?.substring(0, 500),
         });
@@ -210,6 +241,7 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
 
     // 관리자 확인 (서버 측에서도 확인)
     const isAdminUser = await isAdminEmail(userEmail) || isUserAdmin;
+    let analysisPassed = false;
 
     try {
         // Update status to processing
@@ -317,7 +349,7 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
 
         // 모든 사용자에 대해 실제 분석 결과(사진 수, 동영상 길이, 판별 점수)를 기준으로 합격 여부 판정
         // 로그인한 사람과 무관하게 점수만 보고 판정
-        const analysisPassed = analysisResult.passed;
+        analysisPassed = analysisResult.passed;
         const analysisMessage = analysisResult.message;
 
         // 관리자 모드의 강제 통과 처리 제거 - 모든 사용자는 실제 점수 기준으로 판정
@@ -445,37 +477,13 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
         if (!analysisPassed && videoPath) {
             await updateJobProgress(jobId, 88, '불합격 동영상 삭제 중...');
             console.log(`[emt-processor:${jobId}] ${version} failed: Deleting video from Firebase Storage`, { videoPath });
-            try {
-                const videoFileRef = bucket.file(videoPath);
-                const [exists] = await videoFileRef.exists();
-                if (exists) {
-                    await videoFileRef.delete();
-                    console.log(`[emt-processor:${jobId}] Video deleted successfully from Firebase Storage`);
-                } else {
-                    console.log(`[emt-processor:${jobId}] Video file does not exist in Firebase Storage, skipping deletion`);
-                }
-            } catch (error: any) {
-                console.error(`[emt-processor:${jobId}] Error deleting video from Firebase Storage:`, {
-                    message: error.message,
-                    stack: error.stack?.substring(0, 500)
-                });
-                // Continue even if deletion fails
-            }
+            await deleteUploadedEmtVideoIfSafe(bucket, jobId, videoPath, 'analysis failed');
         }
 
         // 3.6. jhlee409@gmail.com: 동영상 업로드 안 함 → 분석 후 Storage에서 동영상 삭제
         if (isJhlee409 && videoPath) {
             await updateJobProgress(jobId, 87, '동영상 삭제 중...');
-            try {
-                const videoFileRef = bucket.file(videoPath);
-                const [exists] = await videoFileRef.exists();
-                if (exists) {
-                    await videoFileRef.delete();
-                    console.log(`[emt-processor:${jobId}] jhlee409: Video deleted from Firebase Storage`);
-                }
-            } catch (error: any) {
-                console.error(`[emt-processor:${jobId}] Error deleting video (jhlee409):`, error?.message);
-            }
+            await deleteUploadedEmtVideoIfSafe(bucket, jobId, videoPath, 'jhlee409 special handling');
         }
 
         // 4. Create log file only if analysis passed
@@ -547,6 +555,11 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
             message: error.message,
             stack: error.stack?.substring(0, 1000),
         });
+
+        if (!analysisPassed && videoPath) {
+            await updateJobProgress(jobId, 88, '오류로 업로드된 동영상 삭제 중...');
+            await deleteUploadedEmtVideoIfSafe(bucket, jobId, videoPath, 'processing error before pass result');
+        }
 
         return {
             success: false,

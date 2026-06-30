@@ -108,6 +108,10 @@ export default function CoursePage() {
     const [loadingEmtExemplary, setLoadingEmtExemplary] = useState(false);
     const [emtExemplaryError, setEmtExemplaryError] = useState<string | null>(null);
     const [showEmtExemplary, setShowEmtExemplary] = useState(false);
+    const [emtLExemplaryVideoUrl, setEmtLExemplaryVideoUrl] = useState<string | null>(null);
+    const [loadingEmtLExemplary, setLoadingEmtLExemplary] = useState(false);
+    const [emtLExemplaryError, setEmtLExemplaryError] = useState<string | null>(null);
+    const [showEmtLExemplary, setShowEmtLExemplary] = useState(false);
     const [emtUploadFiles, setEmtUploadFiles] = useState<File[]>([]);
     const [uploadingEmt, setUploadingEmt] = useState(false);
     const [isDraggingEmt, setIsDraggingEmt] = useState(false);
@@ -118,7 +122,7 @@ export default function CoursePage() {
     const [showEmtVisualization, setShowEmtVisualization] = useState(false);
     const [emtVisualizationIndex, setEmtVisualizationIndex] = useState(0);
     const [emtVersion, setEmtVersion] = useState<'EMT' | 'EMT-L'>('EMT'); // EMT 버전 선택
-    const [emtEndoscopeModel, setEmtEndoscopeModel] = useState<'CV 260' | 'CV 290' | 'X1 660'>('CV 290'); // EMT-L 내시경 모델 (ROI 적용)
+    const [emtEndoscopeModel, setEmtEndoscopeModel] = useState<'CV 260' | 'CV 290' | 'mPAX'>('CV 290'); // EMT-L 내시경 모델 (ROI 적용)
 
     // EMT 시각화 이미지 자동 재생 (1초에 3프레임)
     useEffect(() => {
@@ -349,6 +353,7 @@ export default function CoursePage() {
     const lhtExpertDemoPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const emtOrientationPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const emtExemplaryPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
+    const emtLExemplaryPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const dxEgdLecturePlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const otherLecturePlayerRef = useRef<FullScreenVideoPlayerRef>(null);
     const egdVariationPlayerRef = useRef<FullScreenVideoPlayerRef>(null);
@@ -390,6 +395,9 @@ export default function CoursePage() {
         }
         if (showEmtExemplary && emtExemplaryPlayerRef.current) {
             savePromises.push(emtExemplaryPlayerRef.current.saveWatchTime());
+        }
+        if (showEmtLExemplary && emtLExemplaryPlayerRef.current) {
+            savePromises.push(emtLExemplaryPlayerRef.current.saveWatchTime());
         }
         if (showDxEgdLecture && dxEgdLecturePlayerRef.current) {
             savePromises.push(dxEgdLecturePlayerRef.current.saveWatchTime());
@@ -435,7 +443,7 @@ export default function CoursePage() {
         await Promise.all(savePromises);
     }, [
         showVideo, showMtDemo, showShtOrientation, showShtExpertDemo,
-        showLhtOrientation, showLhtExpertDemo, showEmtOrientation, showEmtExemplary,
+        showLhtOrientation, showLhtExpertDemo, showEmtOrientation, showEmtExemplary, showEmtLExemplary,
         showDxEgdLecture, showOtherLecture, showEgdVariation, showHemoclip,
         showInjection, showApc, showNexpowder, showEvl, showPeg,
         showNvugibOverview, showNvugibCase, showDiagnosticEus, showStentEsoGeJunction
@@ -552,12 +560,36 @@ export default function CoursePage() {
             return;
         }
 
+        // 이미지는 Storage에 저장하지 않음 - 업로드 전에 개수만 확인
+        // 관리자는 이미지 개수 검증 건너뛰기
+        const imageMin = emtVersion === 'EMT-L' ? 42 : 62;
+        const imageMax = emtVersion === 'EMT-L' ? 48 : 66;
+        const isValidImageCount = imageFiles.length >= imageMin && imageFiles.length <= imageMax;
+
+        console.log('Images validated locally before video upload:', {
+            imageCount: imageFiles.length,
+            version: emtVersion,
+            min: imageMin,
+            max: imageMax,
+            isValid: isValidImageCount,
+            isAdmin: isUserAdmin
+        });
+
+        if (!isUserAdmin && !isValidImageCount) {
+            alert(`이미지는 ${imageMin}개에서 ${imageMax}개 사이여야 합니다. 현재: ${imageFiles.length}개`);
+            return;
+        }
+
         // Hide video players
         setShowEmtOrientation(false);
         setEmtOrientationVideoUrl(null);
         setShowEmtExemplary(false);
         setEmtExemplaryVideoUrl(null);
+        setShowEmtLExemplary(false);
+        setEmtLExemplaryVideoUrl(null);
 
+        let uploadedEmtVideoStoragePath = '';
+        let emtAnalysisPassed = false;
         setUploadingEmt(true);
         setEmtProgress(0);
         setEmtProgressMessage('파일 업로드 준비 중...');
@@ -580,6 +612,7 @@ export default function CoursePage() {
                 const fileExtension = videoFile.name.split('.').pop() || 'mp4';
                 const timestamp = Date.now();
                 videoStoragePath = `Simulator_training/EMT/EMT_result/${userProfile.position}-${userProfile.name}-EMT-${timestamp}.${fileExtension}`;
+                uploadedEmtVideoStoragePath = videoStoragePath;
                 const videoStorageRef = ref(storage, videoStoragePath);
 
                 await new Promise<void>((resolve, reject) => {
@@ -608,35 +641,6 @@ export default function CoursePage() {
                 // 관리자인 경우 동영상이 없어도 진행
                 setEmtProgress(30);
                 setEmtProgressMessage('분석 시작 중...');
-            }
-
-            // 이미지는 Storage에 저장하지 않음 - 개수 확인만 수행
-            // 이미지는 로컬에서만 검증하고 버림 (용량 절약 및 시간 절약)
-            // 관리자는 이미지 개수 검증 건너뛰기
-            // 버전별 검증 기준 적용
-            const imageMin = emtVersion === 'EMT-L' ? 42 : 62;
-            const imageMax = emtVersion === 'EMT-L' ? 48 : 66;
-            const isValidImageCount = imageFiles.length >= imageMin && imageFiles.length <= imageMax;
-
-            console.log('Images validated locally (not uploaded to Storage):', {
-                imageCount: imageFiles.length,
-                version: emtVersion,
-                min: imageMin,
-                max: imageMax,
-                isValid: isValidImageCount,
-                isAdmin: isUserAdmin
-            });
-
-            // 이미지 개수 검증 (관리자는 건너뛰기)
-            if (!isUserAdmin && !isValidImageCount) {
-                const errorMessage = emtVersion === 'EMT-L'
-                    ? `이미지는 ${imageMin}개에서 ${imageMax}개 사이여야 합니다. 현재: ${imageFiles.length}개`
-                    : `이미지는 ${imageMin}개에서 ${imageMax}개 사이여야 합니다. 현재: ${imageFiles.length}개`;
-                alert(errorMessage);
-                setUploadingEmt(false);
-                setEmtProgress(0);
-                setEmtProgressMessage('');
-                return;
             }
 
             // Step 2: Create job and get jobId
@@ -893,6 +897,7 @@ export default function CoursePage() {
                             // 일반 사용자 처리
                             // Check if analysis passed
                             if (result.analysisPassed) {
+                                emtAnalysisPassed = true;
                                 // 디버깅: 콘솔에 값 출력
                                 console.log(`=== ${emtVersion} 분석 성공 결과 ===`);
                                 console.log('result:', result);
@@ -1019,7 +1024,6 @@ export default function CoursePage() {
 
                                         const subject = `[${emtVersion}] ${userProfile.name}님의 수행 동영상 및 이미지 제출`;
                                         const senderInfo = `${userProfile.position} ${userProfile.name} (${user?.email || ''})`;
-                                        const instructorNames = instructors.map((i: InstructorInfo) => i.name).join(', ');
                                         const instructorEmails = instructors.map((i: InstructorInfo) => i.email);
 
                                         let body = `안녕하세요,\n\n` +
@@ -1036,61 +1040,42 @@ export default function CoursePage() {
 
                                         body += `감사합니다.`;
 
-                                        // 이메일 내용을 보여주고 확인 받기
-                                        const emailPreview = `이메일을 보내시겠습니까?\n\n` +
-                                            `=== 이메일 내용 미리보기 ===\n\n` +
-                                            `숨은 참조(BCC): ${instructorEmails.join(', ')}\n` +
-                                            `교육자 수: ${instructors.length}명\n` +
-                                            `제목: ${subject}\n\n` +
-                                            `내용:\n${body}\n\n` +
-                                            `==========================\n\n` +
-                                            `위 내용으로 교육자 ${instructors.length}명에게 이메일을 보내시겠습니까?`;
+                                        // EMT/EMT-L 합격 시 해당 병원의 교육자에게 자동으로 성공 메일 전송
+                                        try {
+                                            const response = await fetch('/api/emt-send-email', {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                },
+                                                body: JSON.stringify({
+                                                    instructors: instructors,
+                                                    subject: subject,
+                                                    body: body
+                                                }),
+                                            });
 
-                                        const userConfirmed = confirm(emailPreview);
+                                            const data = await response.json();
 
-                                        if (userConfirmed) {
-                                            // 서버에서 이메일 전송
-                                            try {
-                                                const response = await fetch('/api/emt-send-email', {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                    },
-                                                    body: JSON.stringify({
-                                                        instructors: instructors,
-                                                        subject: subject,
-                                                        body: body
-                                                    }),
-                                                });
-
-                                                const data = await response.json();
-
-                                                if (response.ok && data.success) {
-                                                    alert(`이메일이 성공적으로 전송되었습니다!\n\n` +
-                                                        `${data.sentCount}명의 교육자에게 전송되었습니다.\n\n` +
-                                                        `수신자: ${instructorEmails.join(', ')}`);
-                                                } else {
-                                                    alert(`이메일 전송에 실패했습니다.\n\n` +
-                                                        `오류: ${data.error || '알 수 없는 오류'}\n\n` +
-                                                        `수동으로 이메일을 보내주세요:\n\n` +
-                                                        `숨은 참조(BCC): ${instructorEmails.join(', ')}\n` +
-                                                        `제목: ${subject}\n\n` +
-                                                        `내용:\n${body}`);
-                                                }
-                                            } catch (error: any) {
-                                                console.error('Error sending email:', error);
-                                                alert(`이메일 전송 중 오류가 발생했습니다.\n\n` +
-                                                    `오류: ${error.message || '알 수 없는 오류'}\n\n` +
+                                            if (response.ok && data.success) {
+                                                alert(`이메일이 성공적으로 전송되었습니다!\n\n` +
+                                                    `${data.sentCount}명의 교육자에게 전송되었습니다.\n\n` +
+                                                    `수신자: ${instructorEmails.join(', ')}`);
+                                            } else {
+                                                alert(`이메일 전송에 실패했습니다.\n\n` +
+                                                    `오류: ${data.error || '알 수 없는 오류'}\n\n` +
                                                     `수동으로 이메일을 보내주세요:\n\n` +
                                                     `숨은 참조(BCC): ${instructorEmails.join(', ')}\n` +
                                                     `제목: ${subject}\n\n` +
                                                     `내용:\n${body}`);
                                             }
-                                        } else {
-                                            alert('이메일 전송이 취소되었습니다.\n\n나중에 아래 정보로 직접 이메일을 보내주세요:\n\n' +
+                                        } catch (error: any) {
+                                            console.error('Error sending email:', error);
+                                            alert(`이메일 전송 중 오류가 발생했습니다.\n\n` +
+                                                `오류: ${error.message || '알 수 없는 오류'}\n\n` +
+                                                `수동으로 이메일을 보내주세요:\n\n` +
                                                 `숨은 참조(BCC): ${instructorEmails.join(', ')}\n` +
                                                 `제목: ${subject}\n\n` +
-                                                `평가서 링크: ${result.reportUrl || '없음'}`);
+                                                `내용:\n${body}`);
                                         }
                                     }
                                 }
@@ -1126,10 +1111,7 @@ export default function CoursePage() {
 
                                 detailedMessage += failureDetails;
 
-                                // EMT-L 불합격 시 재시도 안내 추가
-                                if (emtVersion === 'EMT-L') {
-                                    detailedMessage += `\n\n불합격된 동영상은 Firebase에 업로드되지 않았습니다.\n다시 시도해주세요.`;
-                                }
+                                detailedMessage += `\n\n불합격된 동영상은 Firebase Storage에서 삭제됩니다.\n다시 시도해주세요.`;
 
                                 // 시각화 이미지 확인 및 로그
                                 console.log(`=== ${emtVersion} 분석 결과 (일반 사용자 - 불합격) ===`);
@@ -1207,6 +1189,22 @@ export default function CoursePage() {
             console.error('Upload error:', error);
             console.error('Error type:', typeof error);
             console.error('Error object:', error);
+
+            if (uploadedEmtVideoStoragePath && !emtAnalysisPassed) {
+                setEmtProgressMessage('오류로 업로드된 동영상 삭제 중...');
+                try {
+                    const { storage } = await import('@/lib/firebase-client');
+                    const { ref, deleteObject } = await import('firebase/storage');
+                    if (storage) {
+                        await deleteObject(ref(storage, uploadedEmtVideoStoragePath));
+                        console.log('Deleted uploaded EMT video after client-side failure:', uploadedEmtVideoStoragePath);
+                    }
+                } catch (cleanupError: any) {
+                    if (cleanupError?.code !== 'storage/object-not-found') {
+                        console.warn('Failed to delete uploaded EMT video after client-side failure:', cleanupError);
+                    }
+                }
+            }
 
             // Extract error message from various possible formats
             let errorMessage = '업로드에 실패했습니다.';
@@ -1752,6 +1750,9 @@ export default function CoursePage() {
             setShowEmtExemplary(false);
             setEmtExemplaryVideoUrl(null);
             setEmtExemplaryError(null);
+            setShowEmtLExemplary(false);
+            setEmtLExemplaryVideoUrl(null);
+            setEmtLExemplaryError(null);
         }
         // Reset all videos when going back to default view
         if (selectedItem === null) {
@@ -1767,6 +1768,8 @@ export default function CoursePage() {
             setEmtOrientationVideoUrl(null);
             setShowEmtExemplary(false);
             setEmtExemplaryVideoUrl(null);
+            setShowEmtLExemplary(false);
+            setEmtLExemplaryVideoUrl(null);
         }
         // Reset all videos when going back to default view
         if (selectedItem === null) {
@@ -2850,7 +2853,7 @@ export default function CoursePage() {
                                         )
                                     ) : category === 'basic' && selectedItem === 'egd-method' ? (
                                         // EMT: 동영상 플레이어가 표시될 때 전체 영역을 차지
-                                        (showEmtOrientation && emtOrientationVideoUrl) || (showEmtExemplary && emtExemplaryVideoUrl) ? (
+                                        (showEmtOrientation && emtOrientationVideoUrl) || (showEmtExemplary && emtExemplaryVideoUrl) || (showEmtLExemplary && emtLExemplaryVideoUrl) ? (
                                             <>
                                                 {showEmtOrientation && emtOrientationVideoUrl && (
                                                     <FullScreenVideoPlayer
@@ -2886,6 +2889,23 @@ export default function CoursePage() {
                                                         {...getVideoPlayerProps('EMT Exemplary', 'basic')}
                                                     />
                                                 )}
+                                                {showEmtLExemplary && emtLExemplaryVideoUrl && (
+                                                    <FullScreenVideoPlayer
+                                                        ref={emtLExemplaryPlayerRef}
+                                                        isOpen={showEmtLExemplary}
+                                                        videoUrl={emtLExemplaryVideoUrl}
+                                                        onClose={() => {
+                                                            setShowEmtLExemplary(false);
+                                                            setEmtLExemplaryVideoUrl(null);
+                                                            setEmtLExemplaryError(null);
+                                                        }}
+                                                        onEnded={() => {
+                                                            setShowEmtLExemplary(false);
+                                                            setEmtLExemplaryVideoUrl(null);
+                                                        }}
+                                                        {...getVideoPlayerProps('EMT-L Exemplary', 'basic')}
+                                                    />
+                                                )}
                                             </>
                                         ) : (
                                             // 플레이어가 표시되지 않을 때: 일반 콘텐츠 표시
@@ -2914,6 +2934,10 @@ export default function CoursePage() {
                                                             // Hide other video players
                                                             setShowEmtExemplary(false);
                                                             setEmtExemplaryVideoUrl(null);
+                                                            setEmtExemplaryError(null);
+                                                            setShowEmtLExemplary(false);
+                                                            setEmtLExemplaryVideoUrl(null);
+                                                            setEmtLExemplaryError(null);
 
                                                             setLoadingEmtOrientation(true);
                                                             setEmtOrientationError(null);
@@ -2960,43 +2984,90 @@ export default function CoursePage() {
                                                     <p className="text-gray-700 mb-4">
                                                         EMT 수행 모범 동영상입니다. 잘보고 어떤 점에서 초심자와 차이가 나는지 연구해 보세요.
                                                     </p>
-                                                    <button
-                                                        onClick={async () => {
-                                                            // Hide other video players
-                                                            setShowEmtOrientation(false);
-                                                            setEmtOrientationVideoUrl(null);
+                                                    <div className="flex flex-wrap gap-3">
+                                                        <button
+                                                            onClick={async () => {
+                                                                // Hide other video players
+                                                                setShowEmtOrientation(false);
+                                                                setEmtOrientationVideoUrl(null);
+                                                                setShowEmtLExemplary(false);
+                                                                setEmtLExemplaryVideoUrl(null);
+                                                                setEmtLExemplaryError(null);
 
-                                                            setLoadingEmtExemplary(true);
-                                                            setEmtExemplaryError(null);
-                                                            try {
-                                                                const response = await fetch(
-                                                                    `/api/video-url?path=${encodeURIComponent('Simulator_training/EMT/EMT_expert_demo.mp4')}`
-                                                                );
-                                                                if (!response.ok) {
-                                                                    const errorData = await response.json().catch(() => ({ error: '동영상을 불러오는 중 오류가 발생했습니다.' }));
-                                                                    if (response.status === 404) {
-                                                                        throw new Error(`동영상 파일을 찾을 수 없습니다.\n경로: Simulator_training/EMT/EMT_expert_demo.mp4\n\nFirebase Storage에 해당 파일이 존재하는지 확인해주세요.`);
+                                                                setLoadingEmtExemplary(true);
+                                                                setEmtExemplaryError(null);
+                                                                try {
+                                                                    const response = await fetch(
+                                                                        `/api/video-url?path=${encodeURIComponent('Simulator_training/EMT/EMT_expert_demo.mp4')}`
+                                                                    );
+                                                                    if (!response.ok) {
+                                                                        const errorData = await response.json().catch(() => ({ error: '동영상을 불러오는 중 오류가 발생했습니다.' }));
+                                                                        if (response.status === 404) {
+                                                                            throw new Error(`동영상 파일을 찾을 수 없습니다.\n경로: Simulator_training/EMT/EMT_expert_demo.mp4\n\nFirebase Storage에 해당 파일이 존재하는지 확인해주세요.`);
+                                                                        }
+                                                                        throw new Error(errorData.error || '동영상을 불러오는 중 오류가 발생했습니다.');
                                                                     }
-                                                                    throw new Error(errorData.error || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                                    const data = await response.json();
+                                                                    setEmtExemplaryVideoUrl(data.url);
+                                                                    setShowEmtExemplary(true);
+                                                                } catch (error: any) {
+                                                                    setEmtExemplaryError(error.message || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                                } finally {
+                                                                    setLoadingEmtExemplary(false);
                                                                 }
-                                                                const data = await response.json();
-                                                                setEmtExemplaryVideoUrl(data.url);
-                                                                setShowEmtExemplary(true);
-                                                            } catch (error: any) {
-                                                                setEmtExemplaryError(error.message || '동영상을 불러오는 중 오류가 발생했습니다.');
-                                                            } finally {
-                                                                setLoadingEmtExemplary(false);
-                                                            }
-                                                        }}
-                                                        disabled={loadingEmtExemplary}
-                                                        className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-400 transition-all duration-300 ease-in-out flex items-center disabled:opacity-50"
-                                                    >
-                                                        <Video className="w-5 h-5 mr-2" />
-                                                        {loadingEmtExemplary ? '동영상 불러오는 중...' : '동영상 시청'}
-                                                    </button>
+                                                            }}
+                                                            disabled={loadingEmtExemplary}
+                                                            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-400 transition-all duration-300 ease-in-out flex items-center disabled:opacity-50"
+                                                        >
+                                                            <Video className="w-5 h-5 mr-2" />
+                                                            {loadingEmtExemplary ? '동영상 불러오는 중...' : 'EMT 수행 동영상'}
+                                                        </button>
+                                                        <button
+                                                            onClick={async () => {
+                                                                // Hide other video players
+                                                                setShowEmtOrientation(false);
+                                                                setEmtOrientationVideoUrl(null);
+                                                                setShowEmtExemplary(false);
+                                                                setEmtExemplaryVideoUrl(null);
+                                                                setEmtExemplaryError(null);
+
+                                                                setLoadingEmtLExemplary(true);
+                                                                setEmtLExemplaryError(null);
+                                                                try {
+                                                                    const response = await fetch(
+                                                                        `/api/video-url?path=${encodeURIComponent('Simulator_training/EMT/EMT-L_expert_demo.mp4')}`
+                                                                    );
+                                                                    if (!response.ok) {
+                                                                        const errorData = await response.json().catch(() => ({ error: '동영상을 불러오는 중 오류가 발생했습니다.' }));
+                                                                        if (response.status === 404) {
+                                                                            throw new Error(`동영상 파일을 찾을 수 없습니다.\n경로: Simulator_training/EMT/EMT-L_expert_demo.mp4\n\nFirebase Storage에 해당 파일이 존재하는지 확인해주세요.`);
+                                                                        }
+                                                                        throw new Error(errorData.error || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                                    }
+                                                                    const data = await response.json();
+                                                                    setEmtLExemplaryVideoUrl(data.url);
+                                                                    setShowEmtLExemplary(true);
+                                                                } catch (error: any) {
+                                                                    setEmtLExemplaryError(error.message || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                                } finally {
+                                                                    setLoadingEmtLExemplary(false);
+                                                                }
+                                                            }}
+                                                            disabled={loadingEmtLExemplary}
+                                                            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-400 transition-all duration-300 ease-in-out flex items-center disabled:opacity-50"
+                                                        >
+                                                            <Video className="w-5 h-5 mr-2" />
+                                                            {loadingEmtLExemplary ? '동영상 불러오는 중...' : 'EMT-L 수행 동영상'}
+                                                        </button>
+                                                    </div>
                                                     {emtExemplaryError && (
                                                         <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
                                                             {emtExemplaryError}
+                                                        </div>
+                                                    )}
+                                                    {emtLExemplaryError && (
+                                                        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">
+                                                            {emtLExemplaryError}
                                                         </div>
                                                     )}
                                                 </div>
@@ -3054,7 +3125,7 @@ export default function CoursePage() {
                                                                         name="emtEndoscopeModel"
                                                                         value="CV 260"
                                                                         checked={emtEndoscopeModel === 'CV 260'}
-                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'X1 660')}
+                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'mPAX')}
                                                                         className="mr-2"
                                                                     />
                                                                     <span className="text-gray-700">Olympus CV 260</span>
@@ -3065,7 +3136,7 @@ export default function CoursePage() {
                                                                         name="emtEndoscopeModel"
                                                                         value="CV 290"
                                                                         checked={emtEndoscopeModel === 'CV 290'}
-                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'X1 660')}
+                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'mPAX')}
                                                                         className="mr-2"
                                                                     />
                                                                     <span className="text-gray-700">Olympus CV 290</span>
@@ -3074,12 +3145,12 @@ export default function CoursePage() {
                                                                     <input
                                                                         type="radio"
                                                                         name="emtEndoscopeModel"
-                                                                        value="X1 660"
-                                                                        checked={emtEndoscopeModel === 'X1 660'}
-                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'X1 660')}
+                                                                        value="mPAX"
+                                                                        checked={emtEndoscopeModel === 'mPAX'}
+                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'mPAX')}
                                                                         className="mr-2"
                                                                     />
-                                                                    <span className="text-gray-700">Olympus X1 660</span>
+                                                                    <span className="text-gray-700">mPAX</span>
                                                                 </label>
                                                             </div>
                                                         </div>
@@ -6625,4 +6696,3 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         </div>
     );
 }
-

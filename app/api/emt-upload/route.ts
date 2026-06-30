@@ -8,6 +8,7 @@ import { getAdminStorage, getAdminDb } from '@/lib/firebase-admin';
 import { processEmtJob } from '@/lib/emt-processor';
 import { isAdminEmail } from '@/lib/auth-server';
 import * as os from 'os';
+import type { Bucket } from '@google-cloud/storage';
 
 // CORS headers for external access
 const corsHeaders = {
@@ -28,6 +29,37 @@ export async function OPTIONS(request: NextRequest) {
 export const runtime = 'nodejs';
 export const maxDuration = 60; // Reduced timeout - job creation should be fast
 
+const EMT_UPLOADED_VIDEO_PATH_PATTERN = /^Simulator_training\/EMT\/EMT_result\/.+-EMT-\d+\.[a-zA-Z0-9]+$/;
+
+async function deleteUploadedEmtVideoIfSafe(
+    bucket: Bucket,
+    videoPath: unknown,
+    reason: string
+): Promise<void> {
+    if (typeof videoPath !== 'string' || !EMT_UPLOADED_VIDEO_PATH_PATTERN.test(videoPath)) {
+        console.warn('[emt-upload] Skip uploaded EMT video cleanup: unsafe path', { videoPath, reason });
+        return;
+    }
+
+    try {
+        const videoFileRef = bucket.file(videoPath);
+        const [exists] = await videoFileRef.exists();
+        if (exists) {
+            await videoFileRef.delete();
+            console.log('[emt-upload] Deleted uploaded EMT video from Firebase Storage', { videoPath, reason });
+        } else {
+            console.log('[emt-upload] Uploaded EMT video already absent, skipping cleanup', { videoPath, reason });
+        }
+    } catch (error: any) {
+        console.error('[emt-upload] Error cleaning up uploaded EMT video:', {
+            videoPath,
+            reason,
+            message: error?.message,
+            stack: error?.stack?.substring(0, 500),
+        });
+    }
+}
+
 export async function POST(request: NextRequest) {
     console.time('[emt-upload] Job creation');
     console.log('[emt-upload] START', { timestamp: new Date().toISOString() });
@@ -35,6 +67,7 @@ export async function POST(request: NextRequest) {
     const adminStorage = getAdminStorage();
     const adminDb = getAdminDb();
     const bucket = adminStorage.bucket();
+    let cleanupVideoPath: string | undefined;
 
     try {
         // Parse JSON body
@@ -64,14 +97,16 @@ export async function POST(request: NextRequest) {
             hospital,
             isAdmin: isUserAdmin = false,  // 관리자 여부 (클라이언트에서 전달)
             version = 'EMT',  // EMT 버전 (EMT 또는 EMT-L)
-            endoscopeModel,  // EMT-L 시 내시경 모델 (CV 260 | CV 290 | X1 660, ROI 적용)
+            endoscopeModel,  // EMT-L 시 내시경 모델 (CV 260 | CV 290 | mPAX, ROI 적용)
         } = body;
+        cleanupVideoPath = typeof videoPath === 'string' ? videoPath : undefined;
 
         // 관리자 확인 (서버 측에서도 확인)
-        const isAdminUser = await isAdminEmail(userEmail) || isUserAdmin;
+        const isAdminUser = userEmail ? (await isAdminEmail(userEmail) || isUserAdmin) : isUserAdmin;
 
         // Validate required fields (관리자는 videoPath 없어도 가능)
         if ((!videoPath && !isAdminUser) || imageCount === undefined || !userEmail || !position || !name || !hospital) {
+            await deleteUploadedEmtVideoIfSafe(bucket, cleanupVideoPath, 'missing required fields');
             return NextResponse.json(
                 { error: 'Missing required fields: videoPath, imageCount, userEmail, position, name, hospital' },
                 { status: 400, headers: corsHeaders }
@@ -90,6 +125,7 @@ export async function POST(request: NextRequest) {
         const imageMin = version === 'EMT-L' ? 42 : 62;
         const imageMax = version === 'EMT-L' ? 48 : 66;
         if (!isAdminUser && (imageCount < imageMin || imageCount > imageMax)) {
+            await deleteUploadedEmtVideoIfSafe(bucket, cleanupVideoPath, 'invalid image count');
             return NextResponse.json(
                 { error: `이미지는 ${imageMin}개에서 ${imageMax}개 사이여야 합니다. 현재: ${imageCount}개` },
                 { status: 400, headers: corsHeaders }
@@ -195,6 +231,7 @@ export async function POST(request: NextRequest) {
             headers: corsHeaders,
         });
     } catch (error: any) {
+        await deleteUploadedEmtVideoIfSafe(bucket, cleanupVideoPath, 'job creation error');
         console.timeEnd('[emt-upload] Job creation');
         console.error('[emt-upload] UNHANDLED ERROR:', {
             message: error.message,
