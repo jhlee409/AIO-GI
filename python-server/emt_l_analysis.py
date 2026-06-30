@@ -28,6 +28,11 @@ lk_params = dict(
 
 MIN_TRACK_POINTS = 10
 FEATURE_ROI = (171, 36, 581, 446)  # (x1, y1, x2, y2)
+NORMALIZED_FRAME_SIZE = (640, 480)  # width, height
+NORMALIZED_FEATURE_INSET_RATIO = 0.02
+VIEWPORT_DETECTION_SAMPLES = 9
+VIEWPORT_MIN_AREA_RATIO = 0.12
+VIEWPORT_MAX_AREA_RATIO = 1.01
 
 FEATURE_COLS = [
     "mean_velocity",
@@ -44,6 +49,183 @@ FEATURE_COLS = [
 
 OCSVM_NU = 0.2
 REASON_Z_THRESHOLD = 2.0
+
+
+def _order_quad_points(points):
+    """Return points ordered as top-left, top-right, bottom-right, bottom-left."""
+    pts = np.asarray(points, dtype=np.float32).reshape(4, 2)
+    ordered = np.zeros((4, 2), dtype=np.float32)
+    point_sum = pts.sum(axis=1)
+    point_diff = np.diff(pts, axis=1).reshape(-1)
+
+    ordered[0] = pts[np.argmin(point_sum)]
+    ordered[2] = pts[np.argmax(point_sum)]
+    ordered[1] = pts[np.argmin(point_diff)]
+    ordered[3] = pts[np.argmax(point_diff)]
+    return ordered
+
+
+def _full_frame_quad(frame):
+    h, w = frame.shape[:2]
+    return np.array(
+        [[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]],
+        dtype=np.float32,
+    )
+
+
+def _normalized_feature_roi(normalized_size=NORMALIZED_FRAME_SIZE):
+    w, h = normalized_size
+    inset = max(4, int(round(min(w, h) * NORMALIZED_FEATURE_INSET_RATIO)))
+    return (inset, inset, w - inset, h - inset)
+
+
+def detect_viewport_from_frame(frame):
+    """
+    Detect the active endoscope viewport in a frame.
+    The target is the clipped-corner/rectangular monitor area, not a fixed device ROI.
+    """
+    h, w = frame.shape[:2]
+    frame_area = float(w * h)
+    if frame_area <= 0:
+        return None
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    value = hsv[:, :, 2]
+    saturation = hsv[:, :, 1]
+
+    # Active endoscope pixels tend to be brighter and/or more saturated than
+    # the black letterbox/UI background. Morphology reconnects clipped corners.
+    mask = ((value > 25) | ((saturation > 35) & (value > 15))).astype(np.uint8) * 255
+    kernel_size = max(5, int(round(min(w, h) * 0.015)))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    best = None
+    for contour in contours:
+        contour_area = float(cv2.contourArea(contour))
+        if contour_area < frame_area * VIEWPORT_MIN_AREA_RATIO:
+            continue
+
+        hull = cv2.convexHull(contour)
+        rect = cv2.minAreaRect(hull)
+        box = cv2.boxPoints(rect)
+        rect_area = float(cv2.contourArea(box))
+        if rect_area <= 0:
+            continue
+
+        area_ratio = rect_area / frame_area
+        if area_ratio < VIEWPORT_MIN_AREA_RATIO or area_ratio > VIEWPORT_MAX_AREA_RATIO:
+            continue
+
+        rect_w, rect_h = rect[1]
+        short_side = max(1.0, min(rect_w, rect_h))
+        aspect_ratio = max(rect_w, rect_h) / short_side
+        if aspect_ratio > 4.0:
+            continue
+
+        fill_ratio = min(1.0, contour_area / rect_area)
+        size_confidence = min(1.0, area_ratio / 0.45)
+        aspect_confidence = 1.0 if 0.6 <= aspect_ratio <= 2.4 else 0.65
+        confidence = (0.55 * fill_ratio) + (0.35 * size_confidence) + (0.10 * aspect_confidence)
+
+        candidate = {
+            "quad": _order_quad_points(box),
+            "confidence": float(confidence),
+            "area_ratio": float(area_ratio),
+            "fill_ratio": float(fill_ratio),
+        }
+        if best is None or candidate["confidence"] > best["confidence"]:
+            best = candidate
+
+    return best
+
+
+def detect_video_viewport(video_path, sample_count=VIEWPORT_DETECTION_SAMPLES):
+    """
+    Sample the video and return a stable viewport quadrilateral.
+    Falls back to full-frame resize if no viewport can be confidently isolated.
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"{Path(video_path).name}: 비디오를 열 수 없습니다.")
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    candidates = []
+    fallback_frame = None
+
+    if frame_count > 0:
+        start = max(0, int(frame_count * 0.05))
+        end = max(start, int(frame_count * 0.95))
+        indices = np.linspace(start, end, num=sample_count, dtype=int)
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            if fallback_frame is None:
+                fallback_frame = frame
+            detected = detect_viewport_from_frame(frame)
+            if detected is not None:
+                candidates.append(detected)
+    else:
+        for _ in range(sample_count):
+            ret, frame = cap.read()
+            if not ret:
+                break
+            if fallback_frame is None:
+                fallback_frame = frame
+            detected = detect_viewport_from_frame(frame)
+            if detected is not None:
+                candidates.append(detected)
+
+    cap.release()
+
+    if fallback_frame is None:
+        raise RuntimeError(f"{Path(video_path).name}: 비디오 프레임을 읽을 수 없습니다.")
+
+    if candidates:
+        best_confidence = max(c["confidence"] for c in candidates)
+        selected = [
+            c for c in candidates
+            if c["confidence"] >= max(0.35, best_confidence - 0.15)
+        ]
+        quad = np.median(np.stack([c["quad"] for c in selected], axis=0), axis=0)
+        return {
+            "quad": _order_quad_points(quad),
+            "confidence": float(np.median([c["confidence"] for c in selected])),
+            "area_ratio": float(np.median([c["area_ratio"] for c in selected])),
+            "source": "auto_detected",
+            "samples": len(selected),
+        }
+
+    return {
+        "quad": _full_frame_quad(fallback_frame),
+        "confidence": 0.0,
+        "area_ratio": 1.0,
+        "source": "full_frame_fallback",
+        "samples": 0,
+    }
+
+
+def normalize_viewport_frame(frame, viewport, normalized_size=NORMALIZED_FRAME_SIZE):
+    width, height = normalized_size
+    src = _order_quad_points(viewport["quad"])
+    dst = np.array(
+        [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]],
+        dtype=np.float32,
+    )
+    transform = cv2.getPerspectiveTransform(src, dst)
+    return cv2.warpPerspective(
+        frame,
+        transform,
+        (width, height),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+    )
 
 
 def get_feature_mask(frame, roi=FEATURE_ROI, erode_px=3):
@@ -67,17 +249,33 @@ def get_feature_mask(frame, roi=FEATURE_ROI, erode_px=3):
     return mask
 
 
-def extract_features(video_path, roi=None):
-    """Extract motion stability features from a single video. video_path: str or Path. roi: (x1,y1,x2,y2) or None for FEATURE_ROI."""
+def extract_features(
+    video_path,
+    roi=None,
+    normalize_viewport=False,
+    normalized_size=NORMALIZED_FRAME_SIZE,
+):
+    """
+    Extract motion stability features from a single video.
+    If normalize_viewport is True, automatically detect the endoscope viewport,
+    normalize it to normalized_size, and ignore fixed device ROIs.
+    """
     video_path = Path(video_path)
+    viewport = detect_video_viewport(video_path) if normalize_viewport else None
     cap = cv2.VideoCapture(str(video_path))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    use_roi = tuple(roi) if roi is not None else FEATURE_ROI
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    use_roi = (
+        _normalized_feature_roi(normalized_size)
+        if normalize_viewport
+        else (tuple(roi) if roi is not None else FEATURE_ROI)
+    )
 
     ret, old_frame = cap.read()
     if not ret:
         cap.release()
         raise RuntimeError(f"{video_path.name}: 비디오를 읽을 수 없습니다.")
+    if normalize_viewport:
+        old_frame = normalize_viewport_frame(old_frame, viewport, normalized_size)
 
     old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
     feature_mask = get_feature_mask(old_frame, roi=use_roi)
@@ -95,6 +293,8 @@ def extract_features(video_path, roi=None):
         if not ret:
             break
         total_frames += 1
+        if normalize_viewport:
+            frame = normalize_viewport_frame(frame, viewport, normalized_size)
 
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur_scores.append(float(cv2.Laplacian(frame_gray, cv2.CV_64F).var()))
@@ -258,7 +458,13 @@ def extract_features(video_path, roi=None):
         "tremor_energy_ratio": tremor_energy_ratio,
         "blur_ratio": blur_ratio,
         "stop_go_ratio": stop_go_ratio,
-        "path_efficiency": path_efficiency
+        "path_efficiency": path_efficiency,
+        "preprocess_mode": "viewport_normalized" if normalize_viewport else "fixed_roi",
+        "normalized_width": normalized_size[0] if normalize_viewport else None,
+        "normalized_height": normalized_size[1] if normalize_viewport else None,
+        "viewport_confidence": round(float(viewport["confidence"]), 3) if viewport else None,
+        "viewport_area_ratio": round(float(viewport["area_ratio"]), 3) if viewport else None,
+        "viewport_source": viewport["source"] if viewport else None,
     }
 
 
@@ -295,20 +501,56 @@ def build_fail_reasons(test_feat, df_expert):
     return "1. 개별 지표는 전문가 범위 내이나 SVM 종합 점수 기준으로 이상치 판단"
 
 
-def run_emtl_test(video_path: str, x_train_csv_path: str, roi=None):
+def run_emtl_test(
+    video_path: str,
+    x_train_csv_path: str,
+    roi=None,
+    preprocess_mode: str = "viewport_normalized",
+    normalize_viewport=None,
+):
     """
     Load expert from x_train_EMT-L.csv, analyze one test video, return verdict and log text.
-    roi: (x1, y1, x2, y2) or None for default FEATURE_ROI (CV 290).
+    Default preprocessing uses automatic viewport detection + normalized frame size.
+    roi is only used when preprocess_mode is "fixed_roi".
     Returns dict: passed, score, duration, message (log text with appended pass/fail sentence),
     failureReason, detectedFrames, totalFrames, logLines (list of log lines for storage).
     """
     video_path = Path(video_path)
+    mode = (preprocess_mode or "viewport_normalized").strip().lower()
+    if normalize_viewport is None:
+        normalize_viewport = mode in {"viewport_normalized", "auto_viewport", "normalized"}
+
     df_expert = pd.read_csv(x_train_csv_path, encoding="utf-8-sig")
     missing = [c for c in FEATURE_COLS if c not in df_expert.columns]
     if missing:
         raise ValueError(f"x_train_EMT-L.csv에 필요한 컬럼이 없습니다: {missing}")
 
     log_lines = []
+    if normalize_viewport:
+        log_lines.append(
+            f"Preprocess: automatic viewport detection + normalization "
+            f"({NORMALIZED_FRAME_SIZE[0]}x{NORMALIZED_FRAME_SIZE[1]})"
+        )
+        if roi is not None:
+            log_lines.append("ROI parameter ignored because viewport normalization is enabled.")
+        if "preprocess_mode" in df_expert.columns:
+            expert_modes = {
+                str(v).strip().lower()
+                for v in df_expert["preprocess_mode"].dropna().unique()
+            }
+            if expert_modes and "viewport_normalized" not in expert_modes:
+                log_lines.append(
+                    f"Warning: expert CSV preprocess_mode={sorted(expert_modes)}; "
+                    "expected viewport_normalized."
+                )
+        else:
+            log_lines.append(
+                "Warning: expert CSV has no preprocess_mode column. "
+                "Regenerate x_train_EMT-L.csv with the viewport-normalized builder."
+            )
+    else:
+        log_lines.append("Preprocess: fixed ROI")
+
     log_lines.append("Training one-class SVM...")
     scaler = StandardScaler()
     X_exp = scaler.fit_transform(df_expert[FEATURE_COLS])
@@ -316,9 +558,20 @@ def run_emtl_test(video_path: str, x_train_csv_path: str, roi=None):
     ocsvm.fit(X_exp)
 
     log_lines.append("Analyzing test video...")
-    use_roi = tuple(roi) if roi is not None else FEATURE_ROI
-    test_feat = extract_features(str(video_path), roi=use_roi)
+    use_roi = None if normalize_viewport else (tuple(roi) if roi is not None else FEATURE_ROI)
+    test_feat = extract_features(
+        str(video_path),
+        roi=use_roi,
+        normalize_viewport=normalize_viewport,
+        normalized_size=NORMALIZED_FRAME_SIZE,
+    )
     test_name = video_path.name
+    if normalize_viewport:
+        log_lines.append(
+            f"  [전처리] viewport={test_feat['viewport_source']}, "
+            f"confidence={test_feat['viewport_confidence']}, "
+            f"area={test_feat['viewport_area_ratio']}"
+        )
     log_lines.append(f"  [특징점 추적] {test_name}: {test_feat['detected_frames']}/{test_feat['total_frames']} 프레임 ({test_feat['detection_rate_pct']}%)")
     log_lines.append(f"    특징점 수(평균/중앙값/최소/최대): {test_feat['feature_count_avg']:.1f} / {test_feat['feature_count_median']:.1f} / {test_feat['feature_count_min']} / {test_feat['feature_count_max']}")
     log_lines.append(f"    분포 안정성(CV): {test_feat['feature_spread_cv']:.3f} ({test_feat['feature_spread_interp']})")
@@ -360,4 +613,7 @@ def run_emtl_test(video_path: str, x_train_csv_path: str, roi=None):
         "totalFrames": test_feat["total_frames"],
         "logLines": log_lines,
         "verdict": verdict,
+        "preprocessMode": test_feat["preprocess_mode"],
+        "viewportConfidence": test_feat["viewport_confidence"],
+        "viewportSource": test_feat["viewport_source"],
     }

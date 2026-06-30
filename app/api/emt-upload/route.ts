@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
             hospital,
             isAdmin: isUserAdmin = false,  // 관리자 여부 (클라이언트에서 전달)
             version = 'EMT',  // EMT 버전 (EMT 또는 EMT-L)
-            endoscopeModel,  // EMT-L 시 내시경 모델 (CV 260 | CV 290 | mPAX, ROI 적용)
         } = body;
         cleanupVideoPath = typeof videoPath === 'string' ? videoPath : undefined;
 
@@ -159,7 +158,6 @@ export async function POST(request: NextRequest) {
             hospital,
             isAdmin: isAdminUser,  // 관리자 여부 저장
             version: version || 'EMT',  // EMT 버전 저장
-            ...(version === 'EMT-L' && endoscopeModel != null && { endoscopeModel }),  // EMT-L 시 내시경 모델(ROI)
             status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

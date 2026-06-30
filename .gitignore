@@ -53,6 +53,7 @@ next-env.d.ts
 
 # secret files
 /secret/
+/expert_videos/
 *.json
 !/data/**/*.json
 !package.json

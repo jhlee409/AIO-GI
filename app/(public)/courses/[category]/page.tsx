@@ -122,7 +122,6 @@ export default function CoursePage() {
     const [showEmtVisualization, setShowEmtVisualization] = useState(false);
     const [emtVisualizationIndex, setEmtVisualizationIndex] = useState(0);
     const [emtVersion, setEmtVersion] = useState<'EMT' | 'EMT-L'>('EMT'); // EMT 버전 선택
-    const [emtEndoscopeModel, setEmtEndoscopeModel] = useState<'CV 260' | 'CV 290' | 'mPAX'>('CV 290'); // EMT-L 내시경 모델 (ROI 적용)
 
     // EMT 시각화 이미지 자동 재생 (1초에 3프레임)
     useEffect(() => {
@@ -689,7 +688,6 @@ export default function CoursePage() {
                     hospital: userProfile.hospital,
                     isAdmin: isUserAdmin,             // 관리자 여부 전달
                     version: emtVersion,              // EMT 버전 전달
-                    ...(emtVersion === 'EMT-L' && { endoscopeModel: emtEndoscopeModel }), // EMT-L 시 내시경 모델(ROI)
                 }),
             });
 
@@ -3114,47 +3112,6 @@ export default function CoursePage() {
                                                             </label>
                                                         </div>
                                                     </div>
-                                                    {/* EMT-L 선택 시에만: 내시경 모델 선택 (ROI 적용) */}
-                                                    {emtVersion === 'EMT-L' && (
-                                                        <div className="mb-4 pl-4 border-l-2 border-gray-200">
-                                                            <label className="text-sm font-semibold text-gray-700 mb-2 block">내시경 모델 (분석 영역 ROI):</label>
-                                                            <div className="flex flex-wrap gap-4">
-                                                                <label className="flex items-center cursor-pointer">
-                                                                    <input
-                                                                        type="radio"
-                                                                        name="emtEndoscopeModel"
-                                                                        value="CV 260"
-                                                                        checked={emtEndoscopeModel === 'CV 260'}
-                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'mPAX')}
-                                                                        className="mr-2"
-                                                                    />
-                                                                    <span className="text-gray-700">Olympus CV 260</span>
-                                                                </label>
-                                                                <label className="flex items-center cursor-pointer">
-                                                                    <input
-                                                                        type="radio"
-                                                                        name="emtEndoscopeModel"
-                                                                        value="CV 290"
-                                                                        checked={emtEndoscopeModel === 'CV 290'}
-                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'mPAX')}
-                                                                        className="mr-2"
-                                                                    />
-                                                                    <span className="text-gray-700">Olympus CV 290</span>
-                                                                </label>
-                                                                <label className="flex items-center cursor-pointer">
-                                                                    <input
-                                                                        type="radio"
-                                                                        name="emtEndoscopeModel"
-                                                                        value="mPAX"
-                                                                        checked={emtEndoscopeModel === 'mPAX'}
-                                                                        onChange={(e) => setEmtEndoscopeModel(e.target.value as 'CV 260' | 'CV 290' | 'mPAX')}
-                                                                        className="mr-2"
-                                                                    />
-                                                                    <span className="text-gray-700">mPAX</span>
-                                                                </label>
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                     <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-4 text-gray-700 text-sm">
                                                         <p className="font-medium mb-2">EMT 과정의 수료는 이 동영상 및 사진 분석 과정에서 pass 해야만 수료로 인정됩니다. fail의 경우에는 수료가 되지 않으니, 다시 시도해 주세요.</p>
                                                         <ul className="list-disc list-inside space-y-1">

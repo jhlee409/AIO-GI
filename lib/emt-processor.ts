@@ -16,13 +16,6 @@ import { isAdminEmail } from '@/lib/auth-server';
 import nodemailer from 'nodemailer';
 import type { Bucket } from '@google-cloud/storage';
 
-/** EMT-L 내시경 모델별 ROI (x1, y1, x2, y2) */
-const EMTL_ROI_BY_MODEL: Record<string, [number, number, number, number]> = {
-    'CV 260': [230, 55, 595, 420],
-    'CV 290': [171, 36, 581, 446],
-    'mPAX': [750, 0, 1830, 1080],
-};
-
 export interface EmtJobData {
     videoPath: string;
     imageCount: number;
@@ -32,7 +25,6 @@ export interface EmtJobData {
     hospital: string;
     isAdmin?: boolean;  // 관리자 여부
     version?: string;   // EMT 버전 (EMT 또는 EMT-L)
-    endoscopeModel?: 'CV 260' | 'CV 290' | 'mPAX';  // EMT-L 시 내시경 모델(ROI)
 }
 
 export interface VisualizationFrame {
@@ -276,10 +268,9 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
             await updateJobProgress(jobId, 45, '동영상 분석 중...');
 
             if (version === 'EMT-L') {
-                // EMT-L: 독립 프로세스 — /analyze-emtl, x_train_EMT-L.csv, ROI는 내시경 모델별 적용
-                const roi = EMTL_ROI_BY_MODEL[jobData.endoscopeModel ?? 'CV 290'] ?? EMTL_ROI_BY_MODEL['CV 290'];
-                console.log(`[emt-processor:${jobId}] Calling EMT-L analyzeVideoWithPythonEMTL`, { endoscopeModel: jobData.endoscopeModel ?? 'CV 290', roi });
-                analysisResult = await analyzeVideoWithPythonEMTL(videoPath, false, roi);
+                // EMT-L: automatic viewport detection + normalized-frame analysis.
+                console.log(`[emt-processor:${jobId}] Calling EMT-L analyzeVideoWithPythonEMTL`, { preprocessMode: 'viewport_normalized' });
+                analysisResult = await analyzeVideoWithPythonEMTL(videoPath, false);
             } else {
                 // EMT: 기존 방식 그대로
                 const xTrainStoragePath = 'templates/x_train.csv';

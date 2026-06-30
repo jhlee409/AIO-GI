@@ -409,9 +409,15 @@ def analyze_emtl():
         video_path = data.get('videoPath')
         x_train_path = data.get('xTrainPath', 'templates/x_train_EMT-L.csv')
         is_admin = data.get('isAdmin', False)
-        roi = data.get('roi')  # optional [x1, y1, x2, y2]; default CV 290 in emt_l_analysis
+        preprocess_mode = data.get('preprocessMode', 'viewport_normalized')
+        normalize_viewport = data.get('normalizeViewport')
+        roi = data.get('roi')  # legacy fixed-ROI fallback only
 
-        logging.info(f"[EMT-L] Request: bucketName={bucket_name}, videoPath={video_path}, xTrainPath={x_train_path}, roi={roi}")
+        logging.info(
+            f"[EMT-L] Request: bucketName={bucket_name}, videoPath={video_path}, "
+            f"xTrainPath={x_train_path}, preprocessMode={preprocess_mode}, "
+            f"normalizeViewport={normalize_viewport}, roi={roi}"
+        )
 
         if not bucket_name or not video_path:
             return jsonify({"error": "Missing required fields: bucketName, videoPath"}), 400
@@ -435,7 +441,13 @@ def analyze_emtl():
             try:
                 from emt_l_analysis import run_emtl_test
                 roi_tuple = tuple(roi) if (isinstance(roi, (list, tuple)) and len(roi) == 4) else None
-                result = run_emtl_test(local_video_path, local_x_train_path, roi=roi_tuple)
+                result = run_emtl_test(
+                    local_video_path,
+                    local_x_train_path,
+                    roi=roi_tuple,
+                    preprocess_mode=preprocess_mode,
+                    normalize_viewport=normalize_viewport,
+                )
             except Exception as e:
                 logging.error(f"[EMT-L] Analysis error: {e}", exc_info=True)
                 return jsonify({"error": f"EMT-L analysis failed: {str(e)}"}), 500
@@ -458,6 +470,9 @@ def analyze_emtl():
             "failureReason": result["failureReason"],
             "detectedFrames": result["detectedFrames"],
             "totalFrames": result["totalFrames"],
+            "preprocessMode": result.get("preprocessMode"),
+            "viewportConfidence": result.get("viewportConfidence"),
+            "viewportSource": result.get("viewportSource"),
             "visualizationUrls": [],
         }
         logging.info(f"[EMT-L] Analysis complete: passed={result['passed']}, score={result['score']}")

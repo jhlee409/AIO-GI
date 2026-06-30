@@ -247,8 +247,7 @@ const X_TRAIN_EMTL_STORAGE_PATH = 'templates/x_train_EMT-L.csv';
 
 export async function analyzeVideoWithPythonEMTL(
     videoStoragePath: string,
-    isAdmin?: boolean,
-    roi?: [number, number, number, number]
+    isAdmin?: boolean
 ): Promise<VideoAnalysisResult> {
     const cloudRunUrl = process.env.EMT_ANALYSIS_SERVICE_URL || 'https://emt-video-analysis-481900880726.asia-northeast3.run.app';
     const bucketName = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'amcgi-bulletin.appspot.com';
@@ -265,10 +264,9 @@ export async function analyzeVideoWithPythonEMTL(
         videoPath: videoStoragePath,
         xTrainPath: X_TRAIN_EMTL_STORAGE_PATH,
         isAdmin: isAdmin ?? false,
+        preprocessMode: 'viewport_normalized',
+        normalizeViewport: true,
     };
-    if (roi && roi.length === 4) {
-        requestBody.roi = roi;
-    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
@@ -500,4 +498,3 @@ ${analysisSection}
 ==================
 `;
 }
-
