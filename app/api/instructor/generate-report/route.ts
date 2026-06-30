@@ -552,6 +552,8 @@ export async function POST(request: NextRequest) {
                 categoryLower.includes('dx egd 실전 강의') ||
                 categoryNormalized.includes('dx egd 실전 강의') ||
                 category.includes('Dx EGD 실전 강의') ||
+                categoryLower.includes('emergency egd') ||
+                categoryNormalized.includes('emergency egd') ||
                 categoryLower.includes('other lecture') ||
                 categoryNormalized.includes('other lecture');
 

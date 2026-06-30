@@ -14,6 +14,12 @@ assert.match(
 
 assert.match(
   source,
+  /categoryLower\.includes\('emergency egd'\)|categoryNormalized\.includes\('emergency egd'\)/,
+  'Generate report should treat Emergency EGD tracked lectures as watch-time percentage rows'
+);
+
+assert.match(
+  source,
   /formatWatchTimeReportValue\(totalPercentage\)/,
   'Generate report should convert tracked watch-time percentage to yes at the shared threshold'
 );
