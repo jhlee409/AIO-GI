@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
 import { isAdminEmail } from '@/lib/auth-server';
 import { calculateAccumulatedWatchTime } from '@/lib/hooks/useCalculateAccumulatedWatchTime';
+import {
+    TRACKED_F1_WATCH_TIME_LECTURE_TITLES,
+    formatWatchTimeReportValue,
+    isTrackedF1WatchTimeLecture,
+    watchTimeTitlesMatch,
+} from '@/lib/report-watch-time';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -251,6 +257,22 @@ export async function POST(request: NextRequest) {
                 isVideo: true
             });
             console.log('[Report Generation] Added Stent_Eso_GEjunction to Advanced course for F2');
+        }
+
+        const hasAdvancedF1 = normalizedCategories.some((c: string) =>
+            c.includes('advanced course for f1') || c === 'advanced-f1'
+        );
+        const nvugibMxBasicsTitle = '내과전공의를 위한 NVUGIB Mx의 기초';
+        const hasNvugibMxBasics = lectures.some((l: { title: string }) =>
+            l.title.trim() === nvugibMxBasicsTitle
+        );
+        if (hasAdvancedF1 && !hasNvugibMxBasics) {
+            lectures.push({
+                category: 'Advanced course for F1',
+                title: nvugibMxBasicsTitle,
+                isVideo: true
+            });
+            console.log('[Report Generation] Added NVUGIB Mx basics lecture to Advanced course for F1');
         }
 
         // EGD variation: keep only the first code per letter group (e.g. A1, B1, C1 — exclude A2, A3, B2, etc.)
@@ -517,12 +539,8 @@ export async function POST(request: NextRequest) {
                 categoryNormalized.includes('egd variation');
 
             // Check if this row is 'Dx EGD 실전 강의' category
-            // 'Dx EGD 실전 강의'는 "Advanced course for F1" 카테고리의 "진단 내시경" 섹션에 속한 강의들
-            const dxEgdLectureTitles = [
-                'complication_sedation', 'description_impression', 'photo_report',
-                'biopsy_nbi', 'stomach_benign', 'stomach_malignant', 'duodenum',
-                'lx_phx_esophagus', 'set', 'bx_or_no_bx'
-            ];
+            // Watch-time tracked F1 lectures include Dx EGD lectures and selected NVUGIB lectures.
+            const dxEgdLectureTitles = TRACKED_F1_WATCH_TIME_LECTURE_TITLES.map(title => title.toLowerCase().trim());
             const lectureTitleLower = lectureTitle.toLowerCase().trim();
 
             // 카테고리 매칭: 'advanced-f1', 'Advanced course for F1', 'Dx EGD 실전 강의', 'other lecture' 모두 허용
@@ -538,9 +556,7 @@ export async function POST(request: NextRequest) {
                 categoryNormalized.includes('other lecture');
 
             // 강의 제목 매칭: 정확히 일치하거나 포함 관계 확인
-            const isDxEgdLectureTitle = dxEgdLectureTitles.some(title => {
-                return lectureTitleLower === title || lectureTitleLower.includes(title) || title.includes(lectureTitleLower);
-            });
+            const isDxEgdLectureTitle = isTrackedF1WatchTimeLecture(lectureTitle);
 
             const isDxEgdLectureRow = isAdvancedF1Category && isDxEgdLectureTitle;
 
@@ -568,7 +584,7 @@ export async function POST(request: NextRequest) {
             // Complication_Sedation 등이 포함된 경우 무조건 Dx EGD 강의로 처리
             const forceDxEgdRow = dxEgdLectureTitles.some(title => {
                 const titleLower = title.toLowerCase();
-                return lectureTitleLower.includes(titleLower) || titleLower.includes(lectureTitleLower);
+                return watchTimeTitlesMatch(lectureTitleLower, titleLower);
             }) && (categoryLower.includes('advanced') || categoryLower.includes('f1'));
 
             if (forceDxEgdRow && !isDxEgdLectureRow) {
@@ -760,7 +776,7 @@ export async function POST(request: NextRequest) {
                     // 강제 인식된 경우도 포함
                     const finalIsDxEgdLectureRow = isDxEgdLectureRow || (dxEgdLectureTitles.some(title => {
                         const titleLower = title.toLowerCase();
-                        return lectureTitleLower.includes(titleLower) || titleLower.includes(lectureTitleLower);
+                        return watchTimeTitlesMatch(lectureTitleLower, titleLower);
                     }) && (categoryLower.includes('advanced') || categoryLower.includes('f1')));
 
                     if (finalIsDxEgdLectureRow) {
@@ -808,14 +824,14 @@ export async function POST(request: NextRequest) {
                                     const [keyCategory, keyTitle] = key.split('::');
                                     const normalizedKeyCategory = normalizedCategoryForMatching(keyCategory);
                                     if (normalizedKeyCategory === reportCategoryLower &&
-                                        keyTitle.toLowerCase().trim() === lectureTitleLower) {
+                                        watchTimeTitlesMatch(keyTitle, lectureTitleLower)) {
                                         score = 100;
                                         isMatch = true;
                                         console.log(`[Dx EGD 실전 강의 매칭] Matched with category::title format: ${key}, Score: ${score}`);
                                     }
                                 }
                                 // videoTitle만 정확히 일치
-                                else if (keyLower === lectureTitleLower) {
+                                else if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
                                     // category도 일치하면 더 높은 점수
                                     if (watchTimeCategoryLower === reportCategoryLower) {
                                         score = 90;
@@ -827,14 +843,14 @@ export async function POST(request: NextRequest) {
                                 }
                                 // category가 일치하고 videoTitle이 부분 일치
                                 else if (watchTimeCategoryLower === reportCategoryLower) {
-                                    if (keyLower.includes(lectureTitleLower) || lectureTitleLower.includes(keyLower)) {
+                                    if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
                                         score = 60;
                                         isMatch = true;
                                         console.log(`[Dx EGD 실전 강의 매칭] Matched with category + partial title: ${key}, Score: ${score}`);
                                     }
                                 }
                                 // videoTitle만 부분 일치
-                                else if (keyLower.includes(lectureTitleLower) || lectureTitleLower.includes(keyLower)) {
+                                else if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
                                     score = 30;
                                     isMatch = true;
                                     console.log(`[Dx EGD 실전 강의 매칭] Matched with partial title: ${key}, Score: ${score}`);
@@ -851,7 +867,7 @@ export async function POST(request: NextRequest) {
                                 // 누적 시청 시간 데이터가 있으면 % 표시 (로그 파일 유무와 관계없이)
                                 const totalPercentage = (matchedWatchTime as any).totalPercentage || 0;
                                 console.log(`[Dx EGD 실전 강의 매칭] Final match: Key="${matchedKey}", Percentage=${totalPercentage}%`);
-                                newData[row][col] = `${Math.round(totalPercentage)}%`;
+                                newData[row][col] = formatWatchTimeReportValue(totalPercentage);
                                 if (isWithin24Hours((matchedWatchTime as any).lastUpdated)) {
                                     recentlyChangedCells.push([row, col]);
                                 }

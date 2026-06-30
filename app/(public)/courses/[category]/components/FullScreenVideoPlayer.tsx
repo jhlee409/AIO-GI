@@ -47,11 +47,9 @@ const FullScreenVideoPlayer = forwardRef<FullScreenVideoPlayerRef, FullScreenVid
         }
     }), []);
 
-    const handleClose = () => {
+    const handleClose = async () => {
         // 닫기 전에 시청 시간 저장
-        videoPlayerRef.current?.saveWatchTime();
-        // onClose 호출 전에 CustomVideoPlayer가 언마운트되면서 cleanup이 실행되어
-        // 최종 시청 시간이 자동으로 저장됩니다.
+        await videoPlayerRef.current?.saveWatchTime();
         onClose();
     };
 

@@ -210,6 +210,10 @@ export default function CoursePage() {
     const [nvugibOverviewError, setNvugibOverviewError] = useState<string | null>(null);
     const [showNvugibOverview, setShowNvugibOverview] = useState(false);
     const [nvugibOverviewLogCreated, setNvugibOverviewLogCreated] = useState(false);
+    const [selectedNvugibOverviewLecture, setSelectedNvugibOverviewLecture] = useState<{
+        title: string;
+        logSlug: string;
+    } | null>(null);
 
     // NVUGIB case video states
     const [nvugibCaseVideoUrl, setNvugibCaseVideoUrl] = useState<string | null>(null);
@@ -1683,6 +1687,7 @@ export default function CoursePage() {
         setShowNvugibOverview(false);
         setNvugibOverviewVideoUrl(null);
         setNvugibOverviewLogCreated(false);
+        setSelectedNvugibOverviewLecture(null);
         setShowNvugibCase(false);
         setNvugibCaseVideoUrl(null);
         setSelectedNvugibCase(null);
@@ -4720,18 +4725,21 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 ref={nvugibOverviewPlayerRef}
                                                 isOpen={showNvugibOverview}
                                                 videoUrl={nvugibOverviewVideoUrl}
+                                                {...getVideoPlayerProps(selectedNvugibOverviewLecture?.title || 'NVUGIB 총론 강의', 'Advanced course for F1')}
                                                 onPlay={async () => {
                                                     // Create log file when video starts playing
                                                     if (userProfile && !nvugibOverviewLogCreated) {
                                                         try {
-                                                            const logFileName = `${userProfile.position}-${userProfile.name}-NVUGIB_overview`;
+                                                            const lectureTitle = selectedNvugibOverviewLecture?.title || 'NVUGIB 총론 강의';
+                                                            const logSlug = selectedNvugibOverviewLecture?.logSlug || 'NVUGIB_overview';
+                                                            const logFileName = `${userProfile.position}-${userProfile.name}-${logSlug}`;
                                                             const logContent = `Position: ${userProfile.position}
 Name: ${userProfile.name}
 Hospital: ${userProfile.hospital}
 Email: ${user?.email || ''}
 Category: Advanced course for F1
 Section: 치료 내시경 임상
-Item: NVUGIB 총론 강의
+Item: ${lectureTitle}
 Action: Video Play
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
@@ -4760,11 +4768,13 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                     setNvugibOverviewVideoUrl(null);
                                                     setNvugibOverviewError(null);
                                                     setNvugibOverviewLogCreated(false);
+                                                    setSelectedNvugibOverviewLecture(null);
                                                 }}
                                                 onEnded={() => {
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
                                                     setNvugibOverviewLogCreated(false);
+                                                    setSelectedNvugibOverviewLecture(null);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -4846,6 +4856,97 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                             setLoadingNvugibOverview(true);
                                                             setNvugibOverviewError(null);
+                                                            setSelectedNvugibOverviewLecture({
+                                                                title: '내과전공의를 위한 NVUGIB Mx의 기초',
+                                                                logSlug: 'NVUGIB_Mx_basics_for_residents',
+                                                            });
+                                                            try {
+                                                                const storagePath = 'EGD_Hemostasis_training/lecture/Fundamentals_of_NVUGIB_Management.mp4';
+                                                                const response = await fetch(
+                                                                    `/api/video-url?path=${encodeURIComponent(storagePath)}`
+                                                                );
+                                                                if (!response.ok) {
+                                                                    throw new Error('동영상을 불러오는 중 오류가 발생했습니다.');
+                                                                }
+                                                                const data = await response.json();
+                                                                setNvugibOverviewVideoUrl(data.url);
+                                                                setShowNvugibOverview(true);
+                                                            } catch (error: any) {
+                                                                setNvugibOverviewError(error.message || '동영상을 불러오는 중 오류가 발생했습니다.');
+                                                            } finally {
+                                                                setLoadingNvugibOverview(false);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <h3 className="text-xl font-semibold text-white mb-2">
+                                                            내과전공의를 위한 NVUGIB Mx의 기초
+                                                        </h3>
+                                                        <p className="text-white text-sm">
+                                                            클릭하여 동영상 시청
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        className="bg-blue-500 border border-blue-600 rounded-lg shadow-sm p-6 hover:bg-blue-400 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer text-white"
+                                                        onClick={async () => {
+                                                            // Hide other video players
+                                                            setShowVideo(false);
+                                                            setVideoUrl(null);
+                                                            setShowMtDemo(false);
+                                                            setMtDemoVideoUrl(null);
+                                                            setShowShtOrientation(false);
+                                                            setShtOrientationVideoUrl(null);
+                                                            setShowShtExpertDemo(false);
+                                                            setShtExpertDemoVideoUrl(null);
+                                                            setShowLhtOrientation(false);
+                                                            setLhtOrientationVideoUrl(null);
+                                                            setShowLhtExpertDemo(false);
+                                                            setLhtExpertDemoVideoUrl(null);
+                                                            setShowEmtOrientation(false);
+                                                            setEmtOrientationVideoUrl(null);
+                                                            setShowEmtExemplary(false);
+                                                            setEmtExemplaryVideoUrl(null);
+                                                            setShowDxEgdLecture(false);
+                                                            setDxEgdLectureVideoUrl(null);
+                                                            setSelectedLecture(null);
+                                                            setShowOtherLecture(false);
+                                                            setOtherLectureVideoUrl(null);
+                                                            setShowEgdVariation(false);
+                                                            setEgdVariationVideoUrl(null);
+                                                            setSelectedEgdVariationCode(null);
+                                                            setShowHemoclip(false);
+                                                            setHemoclipVideoUrl(null);
+                                                            setHemoclipLogCreated(false);
+                                                            setShowInjection(false);
+                                                            setInjectionVideoUrl(null);
+                                                            setInjectionLogCreated(false);
+                                                            setShowApc(false);
+                                                            setApcVideoUrl(null);
+                                                            setApcLogCreated(false);
+                                                            setShowNexpowder(false);
+                                                            setNexpowderVideoUrl(null);
+                                                            setNexpowderLogCreated(false);
+                                                            setShowEvl(false);
+                                                            setEvlVideoUrl(null);
+                                                            setEvlLogCreated(false);
+                                                            setShowPeg(false);
+                                                            setPegVideoUrl(null);
+                                                            setPegLogCreated(false);
+                                                            setShowNvugibOverview(false);
+                                                            setNvugibOverviewVideoUrl(null);
+                                                            setNvugibOverviewLogCreated(false);
+                                                            setShowNvugibCase(false);
+                                                            setNvugibCaseVideoUrl(null);
+                                                            setSelectedNvugibCase(null);
+                                                            setShowDiagnosticEus(false);
+                                                            setDiagnosticEusVideoUrl(null);
+                                                            setSelectedDiagnosticEus(null);
+
+                                                            setLoadingNvugibOverview(true);
+                                                            setNvugibOverviewError(null);
+                                                            setSelectedNvugibOverviewLecture({
+                                                                title: 'NVUGIB 총론 강의',
+                                                                logSlug: 'NVUGIB_overview',
+                                                            });
                                                             try {
                                                                 const videoFileName = 'NVUGIB_overview.mp4';
                                                                 const storagePath = `EGD_Hemostasis_training/lecture/${videoFileName}`;

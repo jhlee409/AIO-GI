@@ -14,9 +14,10 @@
 import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Play, Pause, Square, Maximize2, Minimize2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { useVideoWatchTime } from '@/lib/hooks/useVideoWatchTime';
+import { isTrackedF1WatchTimeVideo } from '@/lib/report-watch-time';
 
 export interface CustomVideoPlayerRef {
-    saveWatchTime: () => void;
+    saveWatchTime: () => Promise<void>;
 }
 
 interface CustomVideoPlayerProps {
@@ -58,16 +59,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     const [volume, setVolume] = useState(1); // 0.0 ~ 1.0
     const userPausedRef = useRef<boolean>(false); // 사용자가 의도적으로 일시정지했는지 추적
 
-    // 'Dx EGD 실전 강의' 카테고리인 경우에만 시청 시간 추적
-    // category가 'advanced-f1'이고 videoTitle이 Dx EGD 실전 강의 목록에 속하는 경우
-    const dxEgdLectureTitles = [
-        'Complication_Sedation', 'Description_Impression', 'Photo_Report',
-        'Biopsy_NBI', 'Stomach_benign', 'Stomach_malignant', 'Duodenum',
-        'Lx_Phx_Esophagus', 'SET',
-        'Bx_or_no_Bx'
-    ];
-    const isDxEgdLectureCategory = (category === 'advanced-f1' || category?.includes('Advanced course for F1')) &&
-                                   videoTitle && dxEgdLectureTitles.some(title => videoTitle.includes(title));
+    const shouldTrackWatchTime = isTrackedF1WatchTimeVideo(videoTitle, category);
     
     // 디버깅 로그
     useEffect(() => {
@@ -75,13 +67,13 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             console.log('[CustomVideoPlayer] Video tracking check:', {
                 videoTitle,
                 category,
-                isDxEgdLectureCategory,
+                shouldTrackWatchTime,
                 userEmail,
                 userPosition,
                 userName
             });
         }
-    }, [videoTitle, category, isDxEgdLectureCategory, userEmail, userPosition, userName]);
+    }, [videoTitle, category, shouldTrackWatchTime, userEmail, userPosition, userName]);
     const { trackWatchTime, saveFinalWatchTime } = useVideoWatchTime({
         userEmail,
         userPosition,
@@ -116,14 +108,14 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     useImperativeHandle(ref, () => ({
         saveWatchTime: async () => {
             console.log('[CustomVideoPlayer] saveWatchTime called via ref:', {
-                isDxEgdLectureCategory,
+                shouldTrackWatchTime,
                 videoTitle,
                 category,
                 hasVideo: !!videoRef.current,
                 hasSaveFunction: !!saveFinalWatchTimeRef.current
             });
             
-            if (isDxEgdLectureCategory) {
+            if (shouldTrackWatchTime) {
                 if (hasSavedFinalRef.current) {
                     console.log('[CustomVideoPlayer] Already saved this session, skipping ref save');
                     return;
@@ -153,10 +145,10 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                     });
                 }
             } else {
-                console.warn('[CustomVideoPlayer] Not Dx EGD lecture category, skipping save');
+                console.warn('[CustomVideoPlayer] Watch time tracking disabled for this video, skipping save');
             }
         }
-    }), [isDxEgdLectureCategory, videoTitle, category]);
+    }), [shouldTrackWatchTime, videoTitle, category]);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -177,8 +169,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             const total = video.duration;
             setCurrentTime(current);
             
-            // 'Dx EGD 실전 강의' 카테고리인 경우에만 시청 시간 추적
-            if (isDxEgdLectureCategory && !isNaN(current) && !isNaN(total) && total > 0) {
+            if (shouldTrackWatchTime && !isNaN(current) && !isNaN(total) && total > 0) {
                 trackWatchTimeRef.current(current, total);
             }
         };
@@ -200,6 +191,9 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         };
         const handlePlay = () => {
             userPausedRef.current = false; // 재생 중이면 사용자가 일시정지하지 않음
+            if (video.currentTime === 0 && hasSavedFinalRef.current) {
+                hasSavedFinalRef.current = false;
+            }
             setIsPlaying(true);
             // 동영상 재생 중임을 localStorage에 저장 (자동 로그아웃 방지)
             if (typeof window !== 'undefined') {
@@ -235,7 +229,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 }
             }
         };
-        const handleEnded = () => {
+        const handleEnded = async () => {
             setIsPlaying(false);
             const finalTime = video.currentTime;
             const finalDuration = video.duration;
@@ -245,10 +239,9 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 localStorage.setItem('isVideoPlaying', 'false');
             }
             
-            // 'Dx EGD 실전 강의' 카테고리인 경우 동영상 종료 시 최종 시청 시간 저장
-            if (isDxEgdLectureCategory && saveFinalWatchTimeRef.current && !isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0 && !hasSavedFinalRef.current) {
+            if (shouldTrackWatchTime && saveFinalWatchTimeRef.current && !isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0 && !hasSavedFinalRef.current) {
                 hasSavedFinalRef.current = true;
-                saveFinalWatchTimeRef.current(finalTime, finalDuration);
+                await saveFinalWatchTimeRef.current(finalTime, finalDuration);
             }
             
             setCurrentTime(0);
@@ -269,7 +262,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         // 최종 시청 시간 저장 함수 (외부에서 호출 가능)
         const saveFinalTime = () => {
             console.log('[CustomVideoPlayer] saveFinalTime called:', {
-                isDxEgdLectureCategory,
+                shouldTrackWatchTime,
                 videoTitle,
                 category,
                 currentTime: video.currentTime,
@@ -283,7 +276,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 return;
             }
 
-            if (isDxEgdLectureCategory && saveFinalWatchTimeRef.current) {
+            if (shouldTrackWatchTime && saveFinalWatchTimeRef.current) {
                 const finalTime = video.currentTime;
                 const finalDuration = video.duration;
 
@@ -306,7 +299,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 }
             } else {
                 console.warn('[CustomVideoPlayer] Not saving watch time:', {
-                    isDxEgdLectureCategory,
+                    shouldTrackWatchTime,
                     hasSaveFunction: !!saveFinalWatchTimeRef.current
                 });
             }
@@ -336,12 +329,12 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             video.removeEventListener('pause', handlePause);
             video.removeEventListener('ended', handleEnded);
         };
-        // NOTE: 의도적으로 dependency를 videoUrl과 isDxEgdLectureCategory로만 제한합니다.
+        // NOTE: 의도적으로 dependency를 videoUrl과 shouldTrackWatchTime으로만 제한합니다.
         // trackWatchTime과 saveFinalWatchTime은 ref를 통해 접근하므로 dependency에 포함하지 않습니다.
         // onEnded는 재생 중간에 바뀌어도 상관 없고,
         // onEnded가 렌더마다 새 함수가 되어도 effect가 불필요하게 다시 실행되며
         // 비디오가 pause/리셋되는 문제를 막기 위함입니다.
-    }, [videoUrl, isDxEgdLectureCategory]);
+    }, [videoUrl, shouldTrackWatchTime]);
 
     // 볼륨 상태를 실제 비디오 엘리먼트에 반영
     useEffect(() => {
@@ -444,10 +437,25 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         await handlePlayPause();
     };
 
+    const saveCurrentWatchTimeBeforeReset = async () => {
+        const video = videoRef.current;
+        if (!video || hasSavedFinalRef.current || !shouldTrackWatchTime || !saveFinalWatchTimeRef.current) {
+            return;
+        }
+
+        const finalTime = video.currentTime;
+        const finalDuration = video.duration;
+        if (!isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0) {
+            hasSavedFinalRef.current = true;
+            await saveFinalWatchTimeRef.current(finalTime, finalDuration);
+        }
+    };
+
     const handleStop = async () => {
         const video = videoRef.current;
         if (!video) return;
 
+        await saveCurrentWatchTimeBeforeReset();
         userPausedRef.current = true; // 사용자가 의도적으로 정지
         video.pause();
         video.currentTime = 0;
