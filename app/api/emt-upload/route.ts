@@ -190,7 +190,6 @@ export async function POST(request: NextRequest) {
                     totalFrames: result.totalFrames,
                     reportUrl: result.reportUrl,
                     instructors: result.instructors,
-                    adminReportEmailSent: result.adminReportEmailSent,
                 };
 
                 // visualizationUrls가 있는 경우에만 추가 (undefined 방지)
@@ -201,10 +200,19 @@ export async function POST(request: NextRequest) {
                 updateData.error = result.error;
             }
 
+            if (!result.success || result.analysisPassed !== true) {
+                await deleteUploadedEmtVideoIfSafe(
+                    bucket,
+                    cleanupVideoPath,
+                    result.success ? 'analysis completed without pass result' : 'processing returned failure'
+                );
+            }
+
             await adminDb.collection('emtJobs').doc(jobId).update(updateData);
             console.log(`[emt-upload] Job ${jobId} completed`, { status: updateData.status });
         }).catch(async (error) => {
             console.error(`[emt-upload] Job ${jobId} processing error:`, error);
+            await deleteUploadedEmtVideoIfSafe(bucket, cleanupVideoPath, 'background processing rejected before pass result');
             await adminDb.collection('emtJobs').doc(jobId).update({
                 status: 'failed',
                 progress: 0,

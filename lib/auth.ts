@@ -12,7 +12,7 @@ import { UserRole } from '@/types';
  * Primary admin emails - cannot be deleted
  * Re-exported from auth-server for client-side use
  */
-export const PRIMARY_ADMIN_EMAILS = ['jhlee409@gmail.com', 'ghlee409@amc.seoul.kr'];
+export const PRIMARY_ADMIN_EMAILS = ['jhlee409@gmail.com'];
 
 /**
  * Check if an email is a primary admin (client-side)

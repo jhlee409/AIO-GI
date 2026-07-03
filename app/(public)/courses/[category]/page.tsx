@@ -972,11 +972,6 @@ export default function CoursePage() {
                                             successMessage += `(결과 창 닫은 후 자동으로 표시됩니다)\n`;
                                         }
 
-                                        // ghlee409@amc.seoul.kr 합격 시 관리자 이메일 미발송 안내
-                                        if (result.adminReportEmailSent === false) {
-                                            successMessage += `\n※ 관리자(ghlee409@amc.seoul.kr)에게 합격 리포트 이메일이 발송되지 않았습니다.\n서버 환경 변수(GMAIL_USER, GMAIL_APP_PASSWORD)를 확인해 주세요.\n`;
-                                        }
-
                                         alert(successMessage);
 
                                         // 시각화 이미지가 있으면 표시 (alert 이후 약간의 지연)
@@ -989,40 +984,6 @@ export default function CoursePage() {
                                             }, 500); // alert가 닫힌 후 표시
                                         } else {
                                             console.log('시각화 이미지가 없습니다.');
-                                        }
-
-                                        // jhlee409@gmail.com인 경우 메일 전송 대신 리포트만 새 창에 표시
-                                        const isSpecialUser = user?.email === 'jhlee409@gmail.com';
-
-                                        if (isSpecialUser) {
-                                            // 리포트 내용을 새 창에 표시
-                                            if (result.reportUrl) {
-                                                const reportWindow = window.open('', '_blank');
-                                                if (reportWindow) {
-                                                    reportWindow.document.write(`
-                                                        <html>
-                                                            <head>
-                                                                <title>${emtVersion} 평가서</title>
-                                                                <meta charset="utf-8">
-                                                                <style>
-                                                                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
-                                                                    pre { white-space: pre-wrap; word-wrap: break-word; }
-                                                                    a { color: #0066cc; }
-                                                                </style>
-                                                            </head>
-                                                            <body>
-                                                                <h1>${emtVersion} 평가서</h1>
-                                                                <p><a href="${result.reportUrl}" target="_blank">평가서 다운로드 링크</a></p>
-                                                                <p>평가서 링크: <a href="${result.reportUrl}" target="_blank">${result.reportUrl}</a></p>
-                                                            </body>
-                                                        </html>
-                                                    `);
-                                                    reportWindow.document.close();
-                                                }
-                                            }
-                                            setAnalyzingEmt(false);
-                                            setEmtUploadFiles([]);
-                                            return;
                                         }
 
                                         const subject = `[${emtVersion}] ${userProfile.name}님의 수행 동영상 및 이미지 제출`;

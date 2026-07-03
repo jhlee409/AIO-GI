@@ -269,7 +269,7 @@ Cloud Run 배포 사양:
 
 ```
 Super Admin (jhlee409@gmail.com)
-  └── Primary Admin (jhlee409@gmail.com, ghlee409@amc.seoul.kr)
+  └── Primary Admin (jhlee409@gmail.com)
         └── Admin (Firestore admins 컬렉션에 등록된 사용자)
               └── Instructor (users 컬렉션에서 교육자='yes')
                     └── 일반 사용자 (users 컬렉션에 등록)
@@ -286,9 +286,8 @@ Super Admin (jhlee409@gmail.com)
 ### 인증 플로우
 
 1. **로그인**: 이메일/비밀번호 입력 → Firestore에서 사용자 검증 → Firebase Auth 로그인
-2. **세션 생성**: 세션 ID 생성 → Firestore `user_sessions`에 저장 → 동시 로그인 감지
-3. **자동 로그아웃**: 29분 비활성 시 경고 → 30분 비활성 시 자동 로그아웃
-4. **동시 접속 제어**: 동일 계정 동시 로그인 감지 → 관리자에게 이메일 알림
+2. **세션 생성**: 세션 ID 생성 → Firestore `user_sessions`에 저장
+3. **자동 로그아웃**: 9분 비활성 시 경고 → 10분 비활성 시 자동 로그아웃
 
 ---
 
@@ -353,7 +352,6 @@ Super Admin (jhlee409@gmail.com)
 - Firebase Auth ↔ Firestore 동기화
 - 로그 파일/제출 비디오 일괄 삭제
 - 강사 로그인 이력 조회
-- 동시 접속 관리
 
 ### 8. 비디오 시청 추적
 

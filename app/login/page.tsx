@@ -79,7 +79,7 @@ export default function LoginPage() {
             }
             await signInWithEmailAndPassword(auth, email, password);
 
-            // Create session and check for concurrent logins
+            // Create session for activity tracking and logout cleanup
             try {
                 // Get hostname (browser hostname, not computer name)
                 const hostname = typeof window !== 'undefined' ? window.location.hostname : 'Unknown';
@@ -104,10 +104,6 @@ export default function LoginPage() {
                     localStorage.setItem('userEmail', email);
                 }
 
-                // Show warning if concurrent sessions detected
-                if (sessionData.hasConcurrentSessions) {
-                    alert('경고: 동일한 계정이 다른 기기에서 이미 로그인되어 있습니다. 관리자에게 알림이 전송되었습니다.');
-                }
             } catch (sessionError) {
                 // Session creation failure should not block login
                 console.error('Failed to create session:', sessionError);

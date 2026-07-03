@@ -13,7 +13,6 @@ import {
 } from '@/lib/emt-analysis';
 import { findAllInstructorsByHospital } from '@/lib/instructor-utils';
 import { isAdminEmail } from '@/lib/auth-server';
-import nodemailer from 'nodemailer';
 import type { Bucket } from '@google-cloud/storage';
 
 export interface EmtJobData {
@@ -47,8 +46,6 @@ export interface EmtJobResult {
     visualizationUrls?: VisualizationFrame[];
     reportUrl?: string;
     instructors?: Array<{ email: string; name: string }>;
-    /** ghlee409@amc.seoul.kr 합격 시 관리자 리포트 이메일 발송 여부 */
-    adminReportEmailSent?: boolean;
     error?: string;
 }
 
@@ -141,84 +138,6 @@ async function updateJobProgress(jobId: string, progress: number, message?: stri
     }
 }
 
-// Helper function to send email to ghlee409@amc.seoul.kr
-// Returns true if sent, false if skipped or failed (caller can use for result.adminReportEmailSent)
-async function sendReportEmailToAdmin(
-    userEmail: string,
-    position: string,
-    name: string,
-    hospital: string,
-    reportContent: string,
-    reportUrl: string,
-    version: string
-): Promise<boolean> {
-    const TARGET_EMAIL = 'ghlee409@amc.seoul.kr';
-
-    // Only send if userEmail is ghlee409@amc.seoul.kr
-    if (userEmail.toLowerCase() !== TARGET_EMAIL.toLowerCase()) {
-        return false;
-    }
-
-    // Check if email service is configured
-    const hasUser = !!process.env.GMAIL_USER;
-    const hasPass = !!process.env.GMAIL_APP_PASSWORD;
-    if (!hasUser || !hasPass) {
-        console.error('[emt-processor] Admin report email NOT sent: GMAIL_USER=' + (hasUser ? 'set' : 'MISSING') + ', GMAIL_APP_PASSWORD=' + (hasPass ? 'set' : 'MISSING') + '. Set in Cloud Run Variables & Secrets.');
-        return false;
-    }
-
-    console.log('[emt-processor] Sending admin report email to ghlee409@amc.seoul.kr (from ' + (process.env.GMAIL_USER || '').replace(/^(.{2}).*(@.*)$/, '$1***$2') + ')');
-    try {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.GMAIL_USER,
-                pass: process.env.GMAIL_APP_PASSWORD
-            }
-        });
-
-        const subject = `[${version}] ${name}님의 EMT 합격 리포트`;
-        const emailBody = `안녕하세요,
-
-${position} ${name}님의 EGD Method Training (${version}) 수행 결과가 합격으로 확인되었습니다.
-
-제출 정보:
-- 직위: ${position}
-- 이름: ${name}
-- 병원: ${hospital}
-- 이메일: ${userEmail}
-- 평가 일시: ${new Date().toLocaleString('ko-KR')}
-
-평가서 다운로드 링크:
-${reportUrl}
-
-위 링크를 클릭하여 평가서를 확인하실 수 있습니다.
-
-평가서 내용:
-==================
-${reportContent}
-==================
-
-감사합니다.`;
-
-        const emailOptions = {
-            from: process.env.GMAIL_USER,
-            to: TARGET_EMAIL,
-            subject: subject,
-            text: emailBody,
-            html: emailBody.replace(/\n/g, '<br>')
-        };
-
-        await transporter.sendMail(emailOptions);
-        console.log(`[emt-processor] Report email sent successfully to ${TARGET_EMAIL}`);
-        return true;
-    } catch (error: any) {
-        console.error('[emt-processor] Admin report email SEND FAILED:', error.message);
-        console.error('[emt-processor] Full error:', { name: error.name, message: error.message, code: error.code, stack: error.stack?.substring(0, 800) });
-        return false;
-    }
-}
-
 export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise<EmtJobResult> {
     console.time(`[emt-processor:${jobId}] Total processing time`);
 
@@ -228,7 +147,7 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
 
     const { videoPath, imageCount, userEmail, position, name, hospital, isAdmin: isUserAdmin = false, version = 'EMT' } = jobData;
 
-    // jhlee409@gmail.com: 교육자 이메일 미발송, 동영상 업로드 안 함, 결과 메시지만 표시
+    // jhlee409@gmail.com: 교육자 대신 본인에게만 합격 성공 메일 전송
     const isJhlee409 = userEmail.toLowerCase() === 'jhlee409@gmail.com';
 
     // 관리자 확인 (서버 측에서도 확인)
@@ -364,7 +283,6 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
         console.time(`[emt-processor:${jobId}] Report generation`);
         console.log(`[emt-processor:${jobId}] Creating evaluation report`, { analysisPassed, version });
         let reportUrl = '';
-        let adminReportEmailSent = false;
         if (analysisPassed) {
             try {
                 await deletePreviousEmtPassVideosForUser(bucket, jobId, position, name, videoPath);
@@ -428,25 +346,6 @@ export async function processEmtJob(jobId: string, jobData: EmtJobData): Promise
 
                 reportUrl = reportUrlResult;
                 console.log(`[emt-processor:${jobId}] Evaluation report created successfully`, { reportUrl });
-
-                // ghlee409@amc.seoul.kr 합격 시 해당 주소로 관리자 리포트 이메일 발송. jhlee409인 경우 미발송
-                const TARGET_EMAIL = 'ghlee409@amc.seoul.kr';
-                const shouldSendAdminEmail = !isJhlee409 && userEmail.toLowerCase() === TARGET_EMAIL.toLowerCase() && analysisPassed;
-                console.log(`[emt-processor:${jobId}] Admin email check: shouldSend=${shouldSendAdminEmail}, userEmail=${userEmail}, isJhlee409=${isJhlee409}, analysisPassed=${analysisPassed}`);
-                if (shouldSendAdminEmail) {
-                    adminReportEmailSent = await sendReportEmailToAdmin(
-                        userEmail,
-                        position,
-                        name,
-                        hospital,
-                        reportContent,
-                        reportUrl,
-                        version || 'EMT'
-                    );
-                    if (!adminReportEmailSent) {
-                        console.warn(`[emt-processor:${jobId}] Admin report email was not sent (check GMAIL_USER/GMAIL_APP_PASSWORD or mail error).`);
-                    }
-                }
             } catch (error: any) {
                 console.error(`[emt-processor:${jobId}] Error creating report file:`, {
                     message: error.message,
@@ -519,11 +418,10 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         await updateJobProgress(jobId, 95, '최종 처리 중...');
         console.timeEnd(`[emt-processor:${jobId}] Total processing time`);
 
-        // jhlee409@gmail.com: 교육자에게 이메일 보내지 않음 → 목록 미제공.
-        // ghlee409@amc.seoul.kr: 다른 교육자에게 보내지 않음, 본인(관리자)에게만 리포트 발송 → 목록 미제공.
-        const ADMIN_EMAIL = 'ghlee409@amc.seoul.kr';
-        const noEducatorEmail = isJhlee409 || userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-        const instructorsToReturn = noEducatorEmail ? [] : instructors;
+        // jhlee409@gmail.com: 교육자 목록 대신 본인 한 명만 수신자로 반환.
+        const instructorsToReturn = isJhlee409
+            ? [{ email: 'jhlee409@gmail.com', name: name || 'jhlee409' }]
+            : instructors;
 
         return {
             success: true,
@@ -538,7 +436,6 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
             visualizationUrls: analysisResult?.visualizationUrls,
             reportUrl,
             instructors: instructorsToReturn,
-            adminReportEmailSent,
         };
     } catch (error: any) {
         console.timeEnd(`[emt-processor:${jobId}] Total processing time`);

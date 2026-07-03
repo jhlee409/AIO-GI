@@ -265,15 +265,10 @@ export async function POST(request: NextRequest) {
                         // Count matching files for EGD Lesion Dx F1/F2
                         const matchingFiles = logFileNames.filter(fileName => {
                             const fileNameLower = fileName.toLowerCase();
+                            const lectureLower = lectureTitle.toLowerCase();
                             const userLower = userName.toLowerCase();
 
-                            return logLectureTitleMatches(
-                                fileName,
-                                lectureTitle,
-                                undefined,
-                                userName,
-                                userPosition
-                            ) && fileNameLower.includes(userLower);
+                            return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
                         });
                         data[row][col] = matchingFiles.length.toString();
                     } else {

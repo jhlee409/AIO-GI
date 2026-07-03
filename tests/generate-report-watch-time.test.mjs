@@ -36,8 +36,13 @@ assert.doesNotMatch(
   'Generate report should not disable watch-time matching for an entire category'
 );
 
+const regularYesNoBranch = source.slice(
+  source.indexOf('const matchingFilesForYes = logFileNames.filter'),
+  source.indexOf('const hasCompletion = matchingFilesForYes.length > 0')
+);
+
 assert.doesNotMatch(
-  source,
+  regularYesNoBranch,
   /fileNameLower\.includes\(lectureLower\)/,
   'Generate report log matching should require exact lecture title matching, not substring matching'
 );

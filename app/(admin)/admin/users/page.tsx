@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Upload, Send, Search, Trash2, Mail, X, Copy, AlertTriangle, Shield, UserPlus, UserMinus, History } from 'lucide-react';
+import { Upload, Send, Search, Trash2, Mail, X, Copy, Shield, UserPlus, UserMinus, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthProvider';
@@ -96,12 +96,6 @@ export default function AdminUsersPage() {
     const [selectAllVideoFilterPositions, setSelectAllVideoFilterPositions] = useState(false);
     const [filteredUsersForVideoDeletion, setFilteredUsersForVideoDeletion] = useState<any[]>([]);
     const [loadingFilteredUsersForVideoDeletion, setLoadingFilteredUsersForVideoDeletion] = useState(false);
-
-    // Concurrent login report state
-    const [showConcurrentLogins, setShowConcurrentLogins] = useState(false);
-    const [concurrentLogins, setConcurrentLogins] = useState<any[]>([]);
-    const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
-    const [loadingLogins, setLoadingLogins] = useState(false);
     const [hasAutoDeleted, setHasAutoDeleted] = useState(false);
 
     // Admin management state
@@ -1370,73 +1364,6 @@ export default function AdminUsersPage() {
         });
     };
 
-    // Concurrent login report handlers
-    const loadConcurrentLogins = async () => {
-        setLoadingLogins(true);
-        try {
-            const response = await fetch('/api/admin/concurrent-logins');
-            if (response.ok) {
-                const data = await response.json();
-                setConcurrentLogins(data.records || []);
-            } else {
-                alert('동시 접속 기록을 불러오는데 실패했습니다.');
-            }
-        } catch (error) {
-            console.error('Error loading concurrent logins:', error);
-            alert('동시 접속 기록을 불러오는데 실패했습니다.');
-        } finally {
-            setLoadingLogins(false);
-        }
-    };
-
-    const loadRecordDetails = async (id: string) => {
-        try {
-            const response = await fetch('/api/admin/concurrent-logins', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setSelectedRecord(data.record);
-            } else {
-                alert('세부 정보를 불러오는데 실패했습니다.');
-            }
-        } catch (error) {
-            console.error('Error loading record details:', error);
-            alert('세부 정보를 불러오는데 실패했습니다.');
-        }
-    };
-
-    const handleDeleteConcurrentLogin = async (id: string) => {
-        if (!confirm('이 동시 접속 기록을 삭제하시겠습니까?')) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/admin/concurrent-logins', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
-            });
-
-            if (response.ok) {
-                // Remove from local state
-                setConcurrentLogins(concurrentLogins.filter(record => record.id !== id));
-                // If deleted record was selected, clear selection
-                if (selectedRecord && selectedRecord.id === id) {
-                    setSelectedRecord(null);
-                }
-            } else {
-                const data = await response.json();
-                alert(`삭제 실패: ${data.error || '알 수 없는 오류'}`);
-            }
-        } catch (error) {
-            console.error('Error deleting concurrent login record:', error);
-            alert('동시 접속 기록 삭제 중 오류가 발생했습니다.');
-        }
-    };
-
     // Admin management handlers
     const loadAdmins = async () => {
         setLoadingAdmins(true);
@@ -1493,7 +1420,7 @@ export default function AdminUsersPage() {
     };
 
     const handleRemoveAdmin = async (email: string) => {
-        const PRIMARY_ADMIN_EMAILS = ['jhlee409@gmail.com', 'ghlee409@amc.seoul.kr'];
+        const PRIMARY_ADMIN_EMAILS = ['jhlee409@gmail.com'];
         if (PRIMARY_ADMIN_EMAILS.some(adminEmail => email.toLowerCase() === adminEmail.toLowerCase())) {
             alert('❌ Primary admin은 삭제할 수 없습니다.');
             return;
@@ -1793,18 +1720,6 @@ export default function AdminUsersPage() {
                         >
                             <Mail className="w-5 h-5" />
                             <span>메일 보내기</span>
-                        </button>
-                        <button
-                            onClick={() => {
-                                setShowConcurrentLogins(true);
-                                loadConcurrentLogins();
-                            }}
-                            disabled={loading}
-                            className="inline-flex items-center space-x-2 bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-400 transition cursor-pointer disabled:opacity-50 disabled:bg-orange-200 disabled:text-orange-400"
-                            title="한개의 ID가 다른 IP에서 일정 시간 이상 동시에 접속하면 기록됩니다. ID/PW 공유를 감시하는 기능입니다"
-                        >
-                            <AlertTriangle className="w-5 h-5" />
-                            <span>동시 접속 발생 보고</span>
                         </button>
                         <button
                             onClick={() => router.push('/admin/instructor-login-history')}
@@ -2798,142 +2713,6 @@ export default function AdminUsersPage() {
                             >
                                 {authPushLoading ? '등록 중...' : `등록 (${filteredUsersForPush.length}명)`}
                             </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Concurrent Login Report Modal */}
-            {showConcurrentLogins && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-                        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-                            <h2 className="text-2xl font-bold text-gray-900">동시 접속 발생 보고</h2>
-                            <button
-                                onClick={() => {
-                                    setShowConcurrentLogins(false);
-                                    setSelectedRecord(null);
-                                }}
-                                className="text-gray-500 hover:text-gray-700"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
-
-                        <div className="p-6 overflow-y-auto flex-1">
-                            {selectedRecord ? (
-                                // 세부 정보 표시
-                                <div>
-                                    <h3 className="text-xl font-semibold mb-4">세부 정보</h3>
-                                    <div className="space-y-4">
-                                        <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h4 className="font-semibold mb-2">사용자 정보</h4>
-                                            <div className="grid grid-cols-2 gap-2 text-sm">
-                                                <div><strong>이름:</strong> {selectedRecord.name}</div>
-                                                <div><strong>병원:</strong> {selectedRecord.hospital || '정보 없음'}</div>
-                                                <div className="col-span-2"><strong>이메일:</strong> {selectedRecord.email}</div>
-                                                <div><strong>발생 시간:</strong> {new Date(selectedRecord.detectedAt).toLocaleString('ko-KR')}</div>
-                                                <div><strong>겹친 시간:</strong> {Math.round(selectedRecord.overlapDuration / 1000 / 60)}분</div>
-                                                <div><strong>동시 세션 수:</strong> {selectedRecord.totalConcurrentSessions}</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-blue-50 p-4 rounded-lg">
-                                            <h4 className="font-semibold mb-2">새로운 세션</h4>
-                                            <div className="space-y-1 text-sm">
-                                                <div><strong>세션 ID:</strong> {selectedRecord.newSession.sessionId}</div>
-                                                <div><strong>IP 주소:</strong> {selectedRecord.newSession.ipAddress}</div>
-                                                <div><strong>호스트명:</strong> {selectedRecord.newSession.hostname || 'Unknown'}</div>
-                                                <div><strong>로그인 시간:</strong> {new Date(selectedRecord.newSession.loginTime).toLocaleString('ko-KR')}</div>
-                                                <div className="mt-2"><strong>User-Agent:</strong></div>
-                                                <div className="text-xs bg-white p-2 rounded break-all">{selectedRecord.newSession.userAgent}</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-yellow-50 p-4 rounded-lg">
-                                            <h4 className="font-semibold mb-2">기존 세션들 ({selectedRecord.existingSessions.length}개)</h4>
-                                            <div className="space-y-3">
-                                                {selectedRecord.existingSessions.map((session: any, idx: number) => (
-                                                    <div key={idx} className="bg-white p-3 rounded border border-yellow-200">
-                                                        <div className="text-sm space-y-1">
-                                                            <div><strong>세션 {idx + 1}</strong></div>
-                                                            <div><strong>세션 ID:</strong> {session.sessionId}</div>
-                                                            <div><strong>IP 주소:</strong> {session.ipAddress}</div>
-                                                            <div><strong>호스트명:</strong> {session.hostname || 'Unknown'}</div>
-                                                            <div><strong>로그인 시간:</strong> {new Date(session.loginTime).toLocaleString('ko-KR')}</div>
-                                                            <div><strong>마지막 활동:</strong> {new Date(session.lastActivity).toLocaleString('ko-KR')}</div>
-                                                            <div className="mt-2"><strong>User-Agent:</strong></div>
-                                                            <div className="text-xs bg-gray-50 p-2 rounded break-all">{session.userAgent}</div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setSelectedRecord(null)}
-                                        className="mt-4 bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition"
-                                    >
-                                        목록으로
-                                    </button>
-                                </div>
-                            ) : (
-                                // 리스트 표시
-                                <div>
-                                    {loadingLogins ? (
-                                        <div className="flex items-center justify-center py-8">
-                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                        </div>
-                                    ) : concurrentLogins.length === 0 ? (
-                                        <p className="text-center text-gray-500 py-8">동시 접속 기록이 없습니다.</p>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full border-collapse">
-                                                <thead>
-                                                    <tr className="bg-gray-100">
-                                                        <th className="border p-3 text-left">병원</th>
-                                                        <th className="border p-3 text-left">이름</th>
-                                                        <th className="border p-3 text-left">이메일</th>
-                                                        <th className="border p-3 text-left">발생 날짜/시간</th>
-                                                        <th className="border p-3 text-center">동시 세션 수</th>
-                                                        <th className="border p-3 text-center">겹친 시간</th>
-                                                        <th className="border p-3 text-center">작업</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {concurrentLogins.map((record) => (
-                                                        <tr key={record.id} className="hover:bg-gray-50">
-                                                            <td className="border p-3">{record.hospital || '-'}</td>
-                                                            <td className="border p-3">{record.name}</td>
-                                                            <td className="border p-3">{record.email}</td>
-                                                            <td className="border p-3">{new Date(record.detectedAt).toLocaleString('ko-KR')}</td>
-                                                            <td className="border p-3 text-center">{record.totalConcurrentSessions}</td>
-                                                            <td className="border p-3 text-center">{Math.round((record.overlapDuration || 0) / 1000 / 60)}분</td>
-                                                            <td className="border p-3 text-center">
-                                                                <div className="flex items-center justify-center gap-2">
-                                                                    <button
-                                                                        onClick={() => loadRecordDetails(record.id)}
-                                                                        className="bg-blue-500 text-white px-4 py-1 rounded text-sm hover:bg-blue-600 transition"
-                                                                    >
-                                                                        상세보기
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDeleteConcurrentLogin(record.id)}
-                                                                        className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 transition flex items-center"
-                                                                        title="삭제"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>

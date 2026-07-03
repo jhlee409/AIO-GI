@@ -1,21 +1,10 @@
 /**
  * API Route: User Session Management
- * Tracks user sessions and detects concurrent logins
+ * Tracks user sessions for activity and logout cleanup
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
-
-interface SessionData {
-    email: string;
-    sessionId: string;
-    loginTime: Date;
-    lastActivity: Date;
-    ipAddress: string;
-    userAgent: string;
-    hostname?: string;
-    isActive: boolean;
-}
 
 export async function POST(request: NextRequest) {
     try {
@@ -48,40 +37,9 @@ export async function POST(request: NextRequest) {
         const sessionHostname = hostname || 'Unknown';
 
         if (action === 'create') {
-            // Check for existing active sessions
-            const existingSessions = await sessionsRef
-                .where('email', '==', email)
-                .where('isActive', '==', true)
-                .get();
-
-            const activeSessions: SessionData[] = [];
-            const now = new Date();
-
-            existingSessions.forEach(doc => {
-                const data = doc.data();
-                // Check if session is still active (within last 30 minutes)
-                const lastActivity = data.lastActivity?.toDate ? data.lastActivity.toDate() : new Date(data.lastActivity);
-                const timeDiff = now.getTime() - lastActivity.getTime();
-
-                if (timeDiff < 30 * 60 * 1000) { // 30 minutes
-                    activeSessions.push({
-                        email: data.email,
-                        sessionId: data.sessionId,
-                        loginTime: data.loginTime?.toDate ? data.loginTime.toDate() : new Date(data.loginTime),
-                        lastActivity: lastActivity,
-                        ipAddress: data.ipAddress,
-                        userAgent: data.userAgent,
-                        hostname: data.hostname || 'Unknown',
-                        isActive: true
-                    });
-                } else {
-                    // Mark old session as inactive
-                    doc.ref.update({ isActive: false });
-                }
-            });
-
             // Create new session
             const newSessionId = uuidv4();
+            const now = new Date();
             const loginTime = now;
 
             await sessionsRef.add({
@@ -95,38 +53,9 @@ export async function POST(request: NextRequest) {
                 isActive: true
             });
 
-            // If there are active sessions, notify admin
-            if (activeSessions.length > 0) {
-                // Trigger email notification (fire and forget)
-                fetch(`${request.nextUrl.origin}/api/admin/notify-concurrent-login`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        email,
-                        newSession: {
-                            sessionId: newSessionId,
-                            loginTime: loginTime.toISOString(),
-                            ipAddress,
-                            userAgent,
-                            hostname: sessionHostname
-                        },
-                        existingSessions: activeSessions.map(s => ({
-                            ...s,
-                            loginTime: s.loginTime.toISOString(),
-                            lastActivity: s.lastActivity.toISOString()
-                        }))
-                    })
-                }).catch(err => {
-                    console.error('Failed to send concurrent login notification:', err);
-                });
-            }
-
             return NextResponse.json({
                 success: true,
-                sessionId: newSessionId,
-                hasConcurrentSessions: activeSessions.length > 0
+                sessionId: newSessionId
             });
         } else if (action === 'update') {
             if (!sessionId) {

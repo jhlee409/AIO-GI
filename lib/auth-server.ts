@@ -8,7 +8,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 /**
  * Primary admin emails - have admin privileges
  */
-export const PRIMARY_ADMIN_EMAILS = ['jhlee409@gmail.com', 'ghlee409@amc.seoul.kr'];
+export const PRIMARY_ADMIN_EMAILS = ['jhlee409@gmail.com'];
 
 /**
  * Super admin email - absolutely cannot be deleted from Firebase Auth

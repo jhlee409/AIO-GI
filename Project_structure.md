@@ -247,8 +247,6 @@ Next.js 16의 App Router를 사용합니다. 파일 시스템 기반 라우팅�
 | `/api/admin/delete-submitted-videos` | POST | 제출된 비디오 삭제 | Firebase Storage |
 | `/api/admin/delete-content` | POST | 콘텐츠 삭제 | Firestore, Firebase Storage |
 | `/api/admin/check-instructors` | GET | 병원별 강사 확인 | Firestore |
-| `/api/admin/concurrent-logins` | GET, POST, DELETE | 동시 접속 관리 | Firestore |
-| `/api/admin/notify-concurrent-login` | POST | 동시 접속 알림 이메일 | Firestore, Gmail SMTP |
 | `/api/admin/send-log-deletion-email` | POST | 로그 삭제 기록 이메일 | Gmail |
 | `/api/admin/instructor-login-history` | GET | 강사 로그인 이력 (최근 1개월) | Firestore |
 
@@ -270,7 +268,7 @@ Next.js 16의 App Router를 사용합니다. 파일 시스템 기반 라우팅�
 |-----------|--------|------|-----------------|
 | `/api/user/profile` | GET | 사용자 프로필 조회 | Firestore |
 | `/api/user/verify` | POST | 로그인 자격 증명 검증 | Firestore |
-| `/api/user/session` | POST | 세션 생성/업데이트/삭제, 동시 접속 감지 | Firestore |
+| `/api/user/session` | POST | 세션 생성/업데이트/삭제 | Firestore |
 | `/api/user/instructor-status` | GET | 강사 여부 확인 | Firestore |
 
 #### 비디오 API (`/api/video/`)
@@ -405,7 +403,7 @@ Next.js 16의 App Router를 사용합니다. 파일 시스템 기반 라우팅�
 | `auth.ts` | 클라이언트 인증 헬퍼 | `isAdmin()`, `getUserRole()`, `isAuthenticated()`, `PRIMARY_ADMIN_EMAILS` |
 | `auth-server.ts` | 서버 인증 헬퍼 | `isAdminEmail()`, Super Admin 보호 |
 
-**Primary Admin**: `jhlee409@gmail.com`, `ghlee409@amc.seoul.kr` (코드에 하드코딩)
+**Primary Admin**: `jhlee409@gmail.com` (코드에 하드코딩)
 **Super Admin**: `jhlee409@gmail.com` (삭제 불가)
 
 ### EMT 처리 모듈
@@ -839,16 +837,6 @@ EMT 비디오 분석 작업 상태를 저장합니다.
 | `lastUpdated` | timestamp | 마지막 업데이트 시간 |
 | `completed` | boolean | 시청 완료 여부 (80% 이상) |
 
-### `concurrent_logins` 컬렉션
-
-동시 접속 기록을 저장합니다.
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `email` | string | 사용자 이메일 |
-| `detectedAt` | timestamp | 감지 시간 |
-| `sessions` | array | 동시 활성 세션 목록 |
-
 ### 강의 관련 컬렉션
 
 Firestore에 강의 메타데이터가 저장됩니다. 강의 목록은 관리자가 Excel로 일괄 업로드하거나 개별 관리합니다.
@@ -920,7 +908,7 @@ Super Admin (jhlee409@gmail.com)
   ├── Primary Admin 삭제 불가능 (자기 자신 보호)
   └── 유일하게 다른 Primary Admin을 삭제할 수 있음
   
-Primary Admin (jhlee409@gmail.com, ghlee409@amc.seoul.kr)
+Primary Admin (jhlee409@gmail.com)
   │
   ├── 관리자 추가/삭제
   ├── 콘텐츠 관리
@@ -961,7 +949,7 @@ Instructor (users.교육자 === 'yes')
 
 | 파일 | 상수/변수 | 현재 값 |
 |------|----------|---------|
-| `lib/auth.ts` | `PRIMARY_ADMIN_EMAILS` | `['jhlee409@gmail.com', 'ghlee409@amc.seoul.kr']` |
+| `lib/auth.ts` | `PRIMARY_ADMIN_EMAILS` | `['jhlee409@gmail.com']` |
 | `lib/auth-server.ts` | Super Admin 이메일 | `'jhlee409@gmail.com'` |
 | 일부 API Routes | Primary Admin 보호 로직 | `'jhlee409@gmail.com'` |
 
