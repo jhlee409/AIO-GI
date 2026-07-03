@@ -1,5 +1,11 @@
 export const WATCH_TIME_COMPLETION_THRESHOLD_PERCENT = 80;
 
+export type VideoCompletionMode = 'percentage' | 'onPlay' | 'none';
+
+export interface VideoWatchRoutineTrackingOptions {
+    completionMode?: VideoCompletionMode;
+}
+
 export const TRACKED_F1_WATCH_TIME_LECTURE_TITLES = [
     'Complication_Sedation',
     'Description_Impression',
@@ -66,12 +72,109 @@ export function isAdvancedF1WatchTimeCategory(category?: string | null): boolean
     return normalizedCategory === 'advanced-f1' ||
         normalizedCategory.includes('advanced course for f1') ||
         normalizedCategory.includes('dx egd 실전 강의') ||
+        normalizedCategory.includes('emergency egd') ||
         normalizedCategory.includes('other lecture') ||
         normalizedCategory.includes('nvugib');
 }
 
 export function isTrackedF1WatchTimeVideo(videoTitle?: string | null, category?: string | null): boolean {
     return isAdvancedF1WatchTimeCategory(category) && isTrackedF1WatchTimeLecture(videoTitle);
+}
+
+export function shouldTrackVideoWatchRoutine(
+    videoTitle?: string | null,
+    category?: string | null,
+    options: VideoWatchRoutineTrackingOptions = {}
+): boolean {
+    if (options.completionMode === 'percentage') {
+        return true;
+    }
+
+    if (options.completionMode === 'onPlay' || options.completionMode === 'none') {
+        return false;
+    }
+
+    return isTrackedF1WatchTimeVideo(videoTitle, category);
+}
+
+export interface WatchTimeReportEntry {
+    totalPercentage: number;
+    duration: number;
+    category?: string;
+    videoUrl?: string;
+    lastUpdated?: Date;
+}
+
+export interface WatchTimeReportMatch<T extends WatchTimeReportEntry = WatchTimeReportEntry> {
+    key: string;
+    watchTime: T;
+    score: number;
+}
+
+export function normalizeWatchTimeCategory(category?: string | null): string {
+    const categoryLower = String(category || '').toLowerCase().trim();
+    if (categoryLower === 'advanced-f1' || categoryLower.includes('advanced course for f1')) {
+        return 'advanced course for f1';
+    }
+    if (categoryLower === 'advanced-f2' || categoryLower.includes('advanced course for f2')) {
+        return 'advanced course for f2';
+    }
+    return categoryLower;
+}
+
+export function findWatchTimeReportMatch<T extends WatchTimeReportEntry>(
+    userWatchTimes: Map<string, T>,
+    lectureTitle?: string | null,
+    category?: string | null
+): WatchTimeReportMatch<T> | null {
+    const lectureTitleLower = String(lectureTitle || '').toLowerCase().trim();
+    if (!lectureTitleLower) {
+        return null;
+    }
+
+    const reportCategoryLower = normalizeWatchTimeCategory(category);
+    let matchedWatchTime: T | null = null;
+    let matchedKey: string | null = null;
+    let matchScore = 0;
+
+    for (const [key, watchTime] of userWatchTimes.entries()) {
+        const keyLower = key.toLowerCase().trim();
+        const watchTimeCategoryLower = normalizeWatchTimeCategory(watchTime.category);
+        const titleMatches = watchTimeTitlesMatch(keyLower, lectureTitleLower);
+
+        let score = 0;
+        let isMatch = false;
+
+        if (key.includes('::')) {
+            const [keyCategory, keyTitle] = key.split('::');
+            if (
+                normalizeWatchTimeCategory(keyCategory) === reportCategoryLower &&
+                watchTimeTitlesMatch(keyTitle, lectureTitleLower)
+            ) {
+                score = 100;
+                isMatch = true;
+            }
+        } else if (titleMatches) {
+            score = watchTimeCategoryLower === reportCategoryLower ? 90 : 70;
+            isMatch = true;
+        }
+
+        if (isMatch && score > matchScore) {
+            matchedWatchTime = watchTime;
+            matchedKey = key;
+            matchScore = score;
+        }
+    }
+
+    if (!matchedWatchTime || !matchedKey) {
+        return null;
+    }
+
+    return {
+        key: matchedKey,
+        watchTime: matchedWatchTime,
+        score: matchScore,
+    };
 }
 
 export function formatWatchTimeReportValue(totalPercentage: number): string {

@@ -24,6 +24,12 @@ export { useCategoryFilter } from './useCategoryFilter';
 export { useVideoUpload, type UseVideoUploadOptions, type UseVideoUploadReturn, type VideoUploadResult } from './useVideoUpload';
 export { useVideoWatchTime, type UseVideoWatchTimeOptions } from './useVideoWatchTime';
 export { useSaveVideoWatchTime } from './useSaveVideoWatchTime';
+export {
+    useVideoWatchRoutineProps,
+    type UseVideoWatchRoutinePropsOptions,
+    type VideoWatchRoutinePlayerProps,
+    type VideoWatchRoutineUserProfile,
+} from './useVideoWatchRoutineProps';
 // Note: calculateAccumulatedWatchTime is not a hook, it's a utility function for server-side use
 
 // Session hooks (existing)

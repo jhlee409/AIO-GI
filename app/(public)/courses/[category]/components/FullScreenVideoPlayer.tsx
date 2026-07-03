@@ -3,6 +3,7 @@
 import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 import { X } from 'lucide-react';
 import CustomVideoPlayer, { CustomVideoPlayerRef } from '@/components/viewers/CustomVideoPlayer';
+import type { VideoCompletionMode } from '@/lib/report-watch-time';
 
 export interface FullScreenVideoPlayerRef {
     saveWatchTime: () => Promise<void>;
@@ -21,6 +22,7 @@ interface FullScreenVideoPlayerProps {
     userHospital?: string;
     videoTitle?: string;
     category?: string;
+    completionMode?: VideoCompletionMode;
     onThresholdReached?: () => void;
 }
 
@@ -36,6 +38,7 @@ const FullScreenVideoPlayer = forwardRef<FullScreenVideoPlayerRef, FullScreenVid
     userHospital,
     videoTitle,
     category,
+    completionMode,
     onThresholdReached
 }, ref) => {
     const videoPlayerRef = useRef<CustomVideoPlayerRef>(null);
@@ -81,6 +84,7 @@ const FullScreenVideoPlayer = forwardRef<FullScreenVideoPlayerRef, FullScreenVid
                     userHospital={userHospital}
                     videoTitle={videoTitle}
                     category={category}
+                    completionMode={completionMode}
                     onThresholdReached={onThresholdReached}
                 />
             </div>

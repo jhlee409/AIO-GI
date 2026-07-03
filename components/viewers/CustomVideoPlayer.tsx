@@ -14,7 +14,7 @@
 import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Play, Pause, Square, Maximize2, Minimize2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { useVideoWatchTime } from '@/lib/hooks/useVideoWatchTime';
-import { isTrackedF1WatchTimeVideo } from '@/lib/report-watch-time';
+import { shouldTrackVideoWatchRoutine, type VideoCompletionMode } from '@/lib/report-watch-time';
 
 export interface CustomVideoPlayerRef {
     saveWatchTime: () => Promise<void>;
@@ -32,6 +32,7 @@ interface CustomVideoPlayerProps {
     userHospital?: string;
     videoTitle?: string;
     category?: string;
+    completionMode?: VideoCompletionMode;
     onThresholdReached?: () => void;
 }
 
@@ -46,6 +47,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     userHospital,
     videoTitle,
     category,
+    completionMode,
     onThresholdReached
 }, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,7 +61,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     const [volume, setVolume] = useState(1); // 0.0 ~ 1.0
     const userPausedRef = useRef<boolean>(false); // 사용자가 의도적으로 일시정지했는지 추적
 
-    const shouldTrackWatchTime = isTrackedF1WatchTimeVideo(videoTitle, category);
+    const shouldTrackWatchTime = shouldTrackVideoWatchRoutine(videoTitle, category, { completionMode });
     
     // 디버깅 로그
     useEffect(() => {
@@ -67,13 +69,14 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             console.log('[CustomVideoPlayer] Video tracking check:', {
                 videoTitle,
                 category,
+                completionMode,
                 shouldTrackWatchTime,
                 userEmail,
                 userPosition,
                 userName
             });
         }
-    }, [videoTitle, category, shouldTrackWatchTime, userEmail, userPosition, userName]);
+    }, [videoTitle, category, completionMode, shouldTrackWatchTime, userEmail, userPosition, userName]);
     const { trackWatchTime, saveFinalWatchTime } = useVideoWatchTime({
         userEmail,
         userPosition,
@@ -111,6 +114,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 shouldTrackWatchTime,
                 videoTitle,
                 category,
+                completionMode,
                 hasVideo: !!videoRef.current,
                 hasSaveFunction: !!saveFinalWatchTimeRef.current
             });
@@ -148,7 +152,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 console.warn('[CustomVideoPlayer] Watch time tracking disabled for this video, skipping save');
             }
         }
-    }), [shouldTrackWatchTime, videoTitle, category]);
+    }), [shouldTrackWatchTime, videoTitle, category, completionMode]);
 
     useEffect(() => {
         const video = videoRef.current;

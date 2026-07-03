@@ -14,6 +14,7 @@ import { convertBmpToJpg, isBmpFile } from '@/lib/image-converter';
 import { useVideoUpload } from '@/lib/hooks/useVideoUpload';
 import { InstructorInfo } from '@/lib/instructor-utils';
 import { isAdmin } from '@/lib/auth';
+import type { VideoCompletionMode } from '@/lib/report-watch-time';
 import dynamic from 'next/dynamic';
 import { courseConfig, CourseItem, CourseSection } from './config/courseConfig';
 import { removeEmptyLines, removeEmptyLinesAndUnderscores } from './utils/textUtils';
@@ -1936,13 +1937,18 @@ export default function CoursePage() {
     };
 
     // 공통 동영상 플레이어 props
-    const getVideoPlayerProps = (videoTitle: string, videoCategory?: string) => ({
+    const getVideoPlayerProps = (
+        videoTitle: string,
+        videoCategory?: string,
+        completionMode?: VideoCompletionMode
+    ) => ({
         userEmail: user?.email,
         userPosition: userProfile?.position,
         userName: userProfile?.name,
         userHospital: userProfile?.hospital,
         videoTitle: videoTitle,
         category: videoCategory || category,
+        completionMode,
     });
 
     // Show loading state while category is being determined

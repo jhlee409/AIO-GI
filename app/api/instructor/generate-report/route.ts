@@ -4,6 +4,7 @@ import { isAdminEmail } from '@/lib/auth-server';
 import { calculateAccumulatedWatchTime } from '@/lib/hooks/useCalculateAccumulatedWatchTime';
 import {
     TRACKED_F1_WATCH_TIME_LECTURE_TITLES,
+    findWatchTimeReportMatch,
     formatWatchTimeReportValue,
     isTrackedF1WatchTimeLecture,
     watchTimeTitlesMatch,
@@ -850,127 +851,34 @@ export async function POST(request: NextRequest) {
                         return watchTimeTitlesMatch(lectureTitleLower, titleLower);
                     }) && (categoryLower.includes('advanced') || categoryLower.includes('f1')));
 
-                    if (finalIsDxEgdLectureRow) {
-                        console.log(`[Dx EGD 실전 강의 매칭] Checking for user: ${userEmail}`);
-                        console.log(`[Dx EGD 실전 강의 매칭] watchTimeMap.has(${userEmail}): ${watchTimeMap.has(userEmail)}`);
-                        console.log(`[Dx EGD 실전 강의 매칭] All emails in watchTimeMap:`, Array.from(watchTimeMap.keys()));
+                    const watchTimeMatch = userEmail && watchTimeMap.has(userEmail)
+                        ? findWatchTimeReportMatch(watchTimeMap.get(userEmail)!, lectureTitle, category)
+                        : null;
+                    const shouldUseWatchTimeRoutine = finalIsDxEgdLectureRow || !!watchTimeMatch;
 
-                        // 먼저 시청 시간 데이터 확인
-                        if (userEmail && watchTimeMap.has(userEmail)) {
-                            const userWatchTimes = watchTimeMap.get(userEmail)!;
+                    if (shouldUseWatchTimeRoutine) {
+                        console.log(`[동영상 시청 루틴 매칭] User: ${userName}, Email: ${userEmail}, Lecture: "${lectureTitle}", Category: "${category}"`);
+                        console.log(`[동영상 시청 루틴 매칭] watchTimeMap.has(${userEmail}): ${watchTimeMap.has(userEmail)}`);
 
-                            // videoTitle과 lectureTitle 매칭
-                            let matchedWatchTime: { totalPercentage: number; duration: number; category?: string; videoUrl?: string } | null = null;
-                            let matchedKey: string | null = null;
-                            let matchScore = 0;
-
-                            const lectureTitleLower = lectureTitle.toLowerCase().trim();
-
-                            // 카테고리 정규화: 'advanced-f1'과 'Advanced course for F1' 모두 매칭
-                            const normalizedCategoryForMatching = (cat: string) => {
-                                const catLower = cat.toLowerCase().trim();
-                                if (catLower === 'advanced-f1' || catLower.includes('advanced course for f1')) {
-                                    return 'advanced course for f1';
-                                }
-                                return catLower;
-                            };
-
-                            console.log(`[Dx EGD 실전 강의 매칭] User: ${userName}, Email: ${userEmail}, Lecture: "${lectureTitle}", Category: "${category}"`);
-                            console.log(`[Dx EGD 실전 강의 매칭] Available watch time keys:`, Array.from(userWatchTimes.keys()));
-
-                            for (const [key, watchTime] of userWatchTimes.entries()) {
-                                const keyLower = key.toLowerCase().trim();
-                                const watchTimeCategory = watchTime.category || '';
-                                const watchTimeCategoryLower = normalizedCategoryForMatching(watchTimeCategory);
-                                const reportCategoryLower = normalizedCategoryForMatching(category);
-
-                                let score = 0;
-                                let isMatch = false;
-
-                                // category::videoTitle 형식으로 정확히 일치
-                                if (key.includes('::')) {
-                                    const [keyCategory, keyTitle] = key.split('::');
-                                    const normalizedKeyCategory = normalizedCategoryForMatching(keyCategory);
-                                    if (normalizedKeyCategory === reportCategoryLower &&
-                                        watchTimeTitlesMatch(keyTitle, lectureTitleLower)) {
-                                        score = 100;
-                                        isMatch = true;
-                                        console.log(`[Dx EGD 실전 강의 매칭] Matched with category::title format: ${key}, Score: ${score}`);
-                                    }
-                                }
-                                // videoTitle만 정확히 일치
-                                else if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
-                                    // category도 일치하면 더 높은 점수
-                                    if (watchTimeCategoryLower === reportCategoryLower) {
-                                        score = 90;
-                                    } else {
-                                        score = 70;
-                                    }
-                                    isMatch = true;
-                                    console.log(`[Dx EGD 실전 강의 매칭] Matched with title only: ${key}, Score: ${score}`);
-                                }
-                                // category가 일치하고 videoTitle이 부분 일치
-                                else if (watchTimeCategoryLower === reportCategoryLower) {
-                                    if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
-                                        score = 60;
-                                        isMatch = true;
-                                        console.log(`[Dx EGD 실전 강의 매칭] Matched with category + partial title: ${key}, Score: ${score}`);
-                                    }
-                                }
-                                // videoTitle만 부분 일치
-                                else if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
-                                    score = 30;
-                                    isMatch = true;
-                                    console.log(`[Dx EGD 실전 강의 매칭] Matched with partial title: ${key}, Score: ${score}`);
-                                }
-
-                                if (isMatch && score > matchScore) {
-                                    matchedWatchTime = watchTime;
-                                    matchedKey = key;
-                                    matchScore = score;
-                                }
-                            }
-
-                            if (matchedWatchTime && matchedWatchTime.duration > 0) {
-                                // 누적 시청 시간 데이터가 있으면 % 표시 (로그 파일 유무와 관계없이)
-                                const totalPercentage = (matchedWatchTime as any).totalPercentage || 0;
-                                console.log(`[Dx EGD 실전 강의 매칭] Final match: Key="${matchedKey}", Percentage=${totalPercentage}%`);
-                                newData[row][col] = formatWatchTimeReportValue(totalPercentage);
-                                if (isWithin24Hours((matchedWatchTime as any).lastUpdated)) {
-                                    recentlyChangedCells.push([row, col]);
-                                }
-                            } else {
-                                // 시청 시간 데이터가 없으면 로그 파일 확인
-                                if (hasCompletion) {
-                                    // 로그 파일이 있으면 "yes" 표시
-                                    console.log(`[Dx EGD 실전 강의 매칭] No watch time data but log file exists, showing "yes"`);
-                                    newData[row][col] = 'yes';
-                                    if (matchingFilesForYes.some(fn => isWithin24Hours(logFileMeta.get(fn)))) {
-                                        recentlyChangedCells.push([row, col]);
-                                    }
-                                } else {
-                                    // 로그 파일도 없으면 "no" 표시
-                                    console.log(`[Dx EGD 실전 강의 매칭] No watch time data and no log file, showing "no"`);
-                                    newData[row][col] = 'no';
-                                }
+                        if (watchTimeMatch && watchTimeMatch.watchTime.duration > 0) {
+                            const totalPercentage = watchTimeMatch.watchTime.totalPercentage || 0;
+                            console.log(`[동영상 시청 루틴 매칭] Final match: Key="${watchTimeMatch.key}", Score=${watchTimeMatch.score}, Percentage=${totalPercentage}%`);
+                            newData[row][col] = formatWatchTimeReportValue(totalPercentage);
+                            if (isWithin24Hours(watchTimeMatch.watchTime.lastUpdated)) {
+                                recentlyChangedCells.push([row, col]);
                             }
                         } else {
                             // 시청 시간 데이터가 없으면 로그 파일 확인
-                            console.log(`[Dx EGD 실전 강의 매칭] No watch time data found for user: ${userEmail}`);
-                            console.log(`[Dx EGD 실전 강의 매칭] watchTimeMap.has(${userEmail}): ${watchTimeMap.has(userEmail)}`);
-                            if (!watchTimeMap.has(userEmail)) {
-                                console.log(`[Dx EGD 실전 강의 매칭] Available emails in watchTimeMap:`, Array.from(watchTimeMap.keys()));
-                            }
                             if (hasCompletion) {
                                 // 로그 파일이 있으면 "yes" 표시
-                                console.log(`[Dx EGD 실전 강의 매칭] No watch time data for user: ${userEmail}, but log file exists, showing "yes"`);
+                                console.log(`[동영상 시청 루틴 매칭] No watch time data but log file exists, showing "yes"`);
                                 newData[row][col] = 'yes';
                                 if (matchingFilesForYes.some(fn => isWithin24Hours(logFileMeta.get(fn)))) {
                                     recentlyChangedCells.push([row, col]);
                                 }
                             } else {
                                 // 로그 파일도 없으면 "no" 표시
-                                console.log(`[Dx EGD 실전 강의 매칭] No watch time data and no log file for user: ${userEmail}, showing "no"`);
+                                console.log(`[동영상 시청 루틴 매칭] No watch time data and no log file, showing "no"`);
                                 newData[row][col] = 'no';
                             }
                         }

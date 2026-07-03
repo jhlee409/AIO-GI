@@ -18,8 +18,10 @@ const sandbox = {
 vm.runInNewContext(compiled.outputText, sandbox);
 
 const {
+  findWatchTimeReportMatch,
   formatWatchTimeReportValue,
   isTrackedF1WatchTimeLecture,
+  shouldTrackVideoWatchRoutine,
   watchTimeTitlesMatch,
 } = sandbox.module.exports;
 
@@ -41,3 +43,18 @@ assert.equal(formatWatchTimeReportValue(79.4), '79%');
 assert.equal(formatWatchTimeReportValue(79.6), '80%');
 assert.equal(formatWatchTimeReportValue(80), 'yes');
 assert.equal(formatWatchTimeReportValue(100), 'yes');
+
+assert.equal(shouldTrackVideoWatchRoutine('Future Lecture', 'Any category', { completionMode: 'percentage' }), true);
+assert.equal(shouldTrackVideoWatchRoutine('Complication_Sedation', 'Advanced course for F1'), true);
+assert.equal(shouldTrackVideoWatchRoutine('Complication_Sedation', 'Advanced course for F1', { completionMode: 'none' }), false);
+
+const watchTimeMap = new Map([
+  ['Future category::Future Lecture', {
+    totalPercentage: 81,
+    duration: 100,
+    category: 'Future category',
+  }],
+]);
+const match = findWatchTimeReportMatch(watchTimeMap, 'Future Lecture', 'Future category');
+assert.equal(match.key, 'Future category::Future Lecture');
+assert.equal(match.watchTime.totalPercentage, 81);
