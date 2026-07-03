@@ -19,6 +19,12 @@ export const TRACKED_F1_WATCH_TIME_LECTURE_TITLES = [
     'Bx_or_no_Bx',
     '내과전공의를 위한 NVUGIB Mx의 기초',
     'Fundamentals_of_NVUGIB_Management',
+    'Hemoclip',
+    'Injection',
+    'APC',
+    'NexPowder',
+    'EVL',
+    'Stent_Eso_GEjunction',
 ];
 
 const WATCH_TIME_TITLE_ALIASES = [
@@ -42,12 +48,7 @@ export function isTrackedF1WatchTimeLecture(videoTitle?: string | null): boolean
     const normalizedTitle = normalizeWatchTimeTitle(videoTitle);
     if (!normalizedTitle) return false;
 
-    return TRACKED_F1_WATCH_TIME_LECTURE_TITLES.some(title => {
-        const normalizedTrackedTitle = normalizeWatchTimeTitle(title);
-        return normalizedTitle === normalizedTrackedTitle ||
-            normalizedTitle.includes(normalizedTrackedTitle) ||
-            normalizedTrackedTitle.includes(normalizedTitle);
-    });
+    return TRACKED_F1_WATCH_TIME_LECTURE_TITLES.some(title => watchTimeTitlesMatch(normalizedTitle, title));
 }
 
 export function watchTimeTitlesMatch(a?: string | null, b?: string | null): boolean {
@@ -55,14 +56,14 @@ export function watchTimeTitlesMatch(a?: string | null, b?: string | null): bool
     const normalizedB = normalizeWatchTimeTitle(b);
     if (!normalizedA || !normalizedB) return false;
 
-    if (normalizedA === normalizedB || normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) {
+    if (normalizedA === normalizedB) {
         return true;
     }
 
     return WATCH_TIME_TITLE_ALIASES.some(group => {
         const normalizedGroup = group.map(normalizeWatchTimeTitle);
-        const aInGroup = normalizedGroup.some(alias => normalizedA === alias || normalizedA.includes(alias) || alias.includes(normalizedA));
-        const bInGroup = normalizedGroup.some(alias => normalizedB === alias || normalizedB.includes(alias) || alias.includes(normalizedB));
+        const aInGroup = normalizedGroup.includes(normalizedA);
+        const bInGroup = normalizedGroup.includes(normalizedB);
         return aInGroup && bInGroup;
     });
 }
@@ -74,7 +75,8 @@ export function isAdvancedF1WatchTimeCategory(category?: string | null): boolean
         normalizedCategory.includes('dx egd 실전 강의') ||
         normalizedCategory.includes('emergency egd') ||
         normalizedCategory.includes('other lecture') ||
-        normalizedCategory.includes('nvugib');
+        normalizedCategory.includes('nvugib') ||
+        normalizedCategory.includes('simulator advanced course');
 }
 
 export function isTrackedF1WatchTimeVideo(videoTitle?: string | null, category?: string | null): boolean {
@@ -140,13 +142,13 @@ export function findWatchTimeReportMatch<T extends WatchTimeReportEntry>(
     for (const [key, watchTime] of userWatchTimes.entries()) {
         const keyLower = key.toLowerCase().trim();
         const watchTimeCategoryLower = normalizeWatchTimeCategory(watchTime.category);
-        const titleMatches = watchTimeTitlesMatch(keyLower, lectureTitleLower);
 
         let score = 0;
         let isMatch = false;
 
         if (key.includes('::')) {
-            const [keyCategory, keyTitle] = key.split('::');
+            const [keyCategory, ...keyTitleParts] = key.split('::');
+            const keyTitle = keyTitleParts.join('::');
             if (
                 normalizeWatchTimeCategory(keyCategory) === reportCategoryLower &&
                 watchTimeTitlesMatch(keyTitle, lectureTitleLower)
@@ -154,7 +156,7 @@ export function findWatchTimeReportMatch<T extends WatchTimeReportEntry>(
                 score = 100;
                 isMatch = true;
             }
-        } else if (titleMatches) {
+        } else if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
             score = watchTimeCategoryLower === reportCategoryLower ? 90 : 70;
             isMatch = true;
         }

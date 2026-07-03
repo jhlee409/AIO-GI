@@ -29,3 +29,15 @@ assert.match(
   /isTrackedF1WatchTimeLecture\(lectureTitle\)/,
   'Generate report should classify tracked F1 watch-time lectures using the shared title list'
 );
+
+assert.doesNotMatch(
+  source,
+  /const watchTimeMatch = !isEGDVariationRow/,
+  'Generate report should not disable watch-time matching for an entire category'
+);
+
+assert.doesNotMatch(
+  source,
+  /fileNameLower\.includes\(lectureLower\)/,
+  'Generate report log matching should require exact lecture title matching, not substring matching'
+);

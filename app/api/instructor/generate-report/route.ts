@@ -9,6 +9,7 @@ import {
     isTrackedF1WatchTimeLecture,
     watchTimeTitlesMatch,
 } from '@/lib/report-watch-time';
+import { logLectureTitleMatches } from '@/lib/report-log-match';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -691,30 +692,6 @@ export async function POST(request: NextRequest) {
                 // 강의제목이 코드 형식인지 확인 (예: A1, B1, B2, C1, C2, D2, F2 등)
                 const isCodeFormat = /^[A-Z]\d+$/i.test(lectureTitle.trim());
 
-                // 로그 파일 이름에서 코드 추출 함수 (마지막 부분만 사용)
-                // 구분자가 있는 경우: "F1-홍길동-B1" -> "b1"
-                // 구분자가 없는 경우: "F1남효진B1" -> "b1"
-                const extractCodeFromLogFileName = (fileName: string): string | null => {
-                    // 먼저 하이픈으로 분리 시도
-                    const parts = fileName.split('-');
-                    if (parts.length >= 3) {
-                        // 마지막 부분이 코드 형식인지 확인
-                        const lastPart = parts[parts.length - 1].trim();
-                        if (/^[A-Z]\d+$/i.test(lastPart)) {
-                            return lastPart.toLowerCase();
-                        }
-                    }
-
-                    // 구분자가 없는 경우: 파일명 끝에서 코드 형식 찾기
-                    // 예: "F1남효진B1" -> "B1" 추출
-                    const codeMatch = fileName.match(/([A-Z]\d+)$/i);
-                    if (codeMatch) {
-                        return codeMatch[1].toLowerCase();
-                    }
-
-                    return null;
-                };
-
                 // CPX 로그 파일명에서 CPX 케이스 번호 추출 (예: "F1-홍길동-CPX_01" -> "cpx_01")
                 const extractCPXCaseFromLogFileName = (fileName: string): string | null => {
                     // CPX_XX 형식 찾기
@@ -744,17 +721,6 @@ export async function POST(request: NextRequest) {
                             return false;
                         }
 
-                        // 코드 형식인 경우: 마지막 부분만 매칭
-                        if (isCodeFormat) {
-                            const codeFromFile = extractCodeFromLogFileName(fileName);
-                            if (codeFromFile && codeFromFile === lectureLower) {
-                                // 사용자 이름도 확인
-                                return fileNameLower.includes(userLower);
-                            }
-                            return false;
-                        }
-
-                        // 코드 형식이 아닌 경우: 기존 로직 사용
                         return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
                     });
                     const cellVal = matchingFiles.length > 0 ? matchingFiles.length.toString() : '0';
@@ -767,7 +733,6 @@ export async function POST(request: NextRequest) {
                     // For other categories: use yes/no, or percentage if no completion
                     const matchingFilesForYes = logFileNames.filter(fileName => {
                         const fileNameLower = fileName.toLowerCase();
-                        const lectureLower = lectureTitle.toLowerCase();
                         const userLower = userName.toLowerCase();
                         if (!logIdentityMatchesUser(logFileText.get(fileName), userEmail, userHospital)) {
                             return false;
@@ -816,31 +781,37 @@ export async function POST(request: NextRequest) {
 
                         // EGD variation 카테고리인 경우: 코드 형식으로 매칭 (구분자 없음 지원)
                         if (isEGDVariationRow && isCodeFormat) {
-                            const codeFromFile = extractCodeFromLogFileName(fileName);
-                            if (codeFromFile && codeFromFile === lectureLower) {
-                                // 사용자 이름과 직위 확인
-                                const userPositionLower = userPosition.toLowerCase();
-                                const userInFileName = fileNameLower.includes(userLower);
-                                const positionInFileName = userPositionLower && fileNameLower.includes(userPositionLower);
+                            const userPositionLower = userPosition.toLowerCase();
+                            const userInFileName = fileNameLower.includes(userLower);
+                            const positionInFileName = userPositionLower && fileNameLower.includes(userPositionLower);
 
-                                // 매칭 조건: 코드가 일치하고, 사용자 이름이 포함되어 있으며, 직위도 포함되어 있어야 함
-                                return userInFileName && (userPositionLower ? positionInFileName : true);
-                            }
-                            return false;
+                            return logLectureTitleMatches(
+                                fileName,
+                                lectureTitle,
+                                logFileText.get(fileName),
+                                userName,
+                                userPosition
+                            ) && userInFileName && (userPositionLower ? positionInFileName : true);
                         }
 
                         // 코드 형식인 경우: 마지막 부분만 매칭
                         if (isCodeFormat) {
-                            const codeFromFile = extractCodeFromLogFileName(fileName);
-                            if (codeFromFile && codeFromFile === lectureLower) {
-                                // 사용자 이름도 확인
-                                return fileNameLower.includes(userLower);
-                            }
-                            return false;
+                            return logLectureTitleMatches(
+                                fileName,
+                                lectureTitle,
+                                logFileText.get(fileName),
+                                userName,
+                                userPosition
+                            ) && fileNameLower.includes(userLower);
                         }
 
-                        // 코드 형식이 아닌 경우: 기존 로직 사용
-                        return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
+                        return logLectureTitleMatches(
+                            fileName,
+                            lectureTitle,
+                            logFileText.get(fileName),
+                            userName,
+                            userPosition
+                        ) && fileNameLower.includes(userLower);
                     });
                     const hasCompletion = matchingFilesForYes.length > 0;
 

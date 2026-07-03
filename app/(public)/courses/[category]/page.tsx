@@ -3802,7 +3802,7 @@ export default function CoursePage() {
                                                     setDiagnosticEusVideoUrl(null);
                                                     setSelectedDiagnosticEus(null);
                                                 }}
-                                                {...getVideoPlayerProps('Hemoclip', 'advanced-f1')}
+                                                {...getVideoPlayerProps('Hemoclip', 'Simulator Advanced Course', 'percentage')}
                                                 onThresholdReached={() => {
                                                     setHemoclipLogCreated(true);
                                                 }}
@@ -3962,7 +3962,7 @@ export default function CoursePage() {
                                                     setDiagnosticEusVideoUrl(null);
                                                     setSelectedDiagnosticEus(null);
                                                 }}
-                                                {...getVideoPlayerProps('Injection', 'advanced-f1')}
+                                                {...getVideoPlayerProps('Injection', 'Simulator Advanced Course', 'percentage')}
                                                 onThresholdReached={() => {
                                                     setInjectionLogCreated(true);
                                                 }}
@@ -4119,7 +4119,7 @@ export default function CoursePage() {
                                                     setDiagnosticEusVideoUrl(null);
                                                     setSelectedDiagnosticEus(null);
                                                 }}
-                                                {...getVideoPlayerProps('APC', 'advanced-f1')}
+                                                {...getVideoPlayerProps('APC', 'Simulator Advanced Course', 'percentage')}
                                                 onThresholdReached={() => {
                                                     setApcLogCreated(true);
                                                 }}
@@ -4273,7 +4273,7 @@ export default function CoursePage() {
                                                     setDiagnosticEusVideoUrl(null);
                                                     setSelectedDiagnosticEus(null);
                                                 }}
-                                                {...getVideoPlayerProps('NexPowder', 'advanced-f1')}
+                                                {...getVideoPlayerProps('NexPowder', 'Simulator Advanced Course', 'percentage')}
                                                 onThresholdReached={() => {
                                                     setNexpowderLogCreated(true);
                                                 }}
@@ -4424,7 +4424,7 @@ export default function CoursePage() {
                                                     setDiagnosticEusVideoUrl(null);
                                                     setSelectedDiagnosticEus(null);
                                                 }}
-                                                {...getVideoPlayerProps('EVL', 'advanced-f1')}
+                                                {...getVideoPlayerProps('EVL', 'Simulator Advanced Course', 'percentage')}
                                                 onThresholdReached={() => {
                                                     setEvlLogCreated(true);
                                                 }}
@@ -6222,35 +6222,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 userName={userProfile?.name}
                                                 userHospital={userProfile?.hospital}
                                                 videoTitle="Stent_Eso_GEjunction"
-                                                category="Advanced course for F2"
-                                                onPlay={async () => {
-                                                    if (userProfile && !stentEsoGeJunctionLogCreated) {
-                                                        try {
-                                                            const logFileName = `${userProfile.position}-${userProfile.name}-Stent_Eso_GEjunction`;
-                                                            const logContent = `Position: ${userProfile.position}
-Name: ${userProfile.name}
-Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
-Category: Advanced course for F2
-Section: Stent Eso GE junction
-Lecture Title: Stent_Eso_GEjunction
-Action: Video Play
-Timestamp: ${new Date().toISOString()}
-Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                            const response = await fetch('/api/log/create', {
-                                                                method: 'POST',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ fileName: logFileName, content: logContent }),
-                                                            });
-                                                            if (response.ok) {
-                                                                setStentEsoGeJunctionLogCreated(true);
-                                                            }
-                                                        } catch (error) {
-                                                            console.error('Error creating log file:', error);
-                                                        }
-                                                    }
-                                                }}
+                                                category="Simulator Advanced Course"
+                                                completionMode="percentage"
                                                 onClose={() => {
                                                     setShowStentEsoGeJunction(false);
                                                     setStentEsoGeJunctionVideoUrl(null);

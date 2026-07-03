@@ -7,6 +7,7 @@ import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
+import { logLectureTitleMatches } from '@/lib/report-log-match';
 
 export async function POST(request: NextRequest) {
     try {
@@ -254,6 +255,7 @@ export async function POST(request: NextRequest) {
 
             for (let col = 2; col < data[1]?.length || 0; col++) { // Start from column C
                 const userName = String(data[1]?.[col] || '').trim(); // Get user name from row 1
+                const userPosition = String(data[0]?.[col] || '').trim(); // Get user position from row 0
                 if (!userName) continue; // Skip empty columns
 
                 if (data[row]) {
@@ -263,22 +265,30 @@ export async function POST(request: NextRequest) {
                         // Count matching files for EGD Lesion Dx F1/F2
                         const matchingFiles = logFileNames.filter(fileName => {
                             const fileNameLower = fileName.toLowerCase();
-                            const lectureLower = lectureTitle.toLowerCase();
                             const userLower = userName.toLowerCase();
 
-                            // Check if file name contains both lecture title and user name
-                            return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
+                            return logLectureTitleMatches(
+                                fileName,
+                                lectureTitle,
+                                undefined,
+                                userName,
+                                userPosition
+                            ) && fileNameLower.includes(userLower);
                         });
                         data[row][col] = matchingFiles.length.toString();
                     } else {
                         // Check if any log file name contains both lecture title and user name
                         const hasCompletion = logFileNames.some(fileName => {
                             const fileNameLower = fileName.toLowerCase();
-                            const lectureLower = lectureTitle.toLowerCase();
                             const userLower = userName.toLowerCase();
 
-                            // Check if file name contains both lecture title and user name
-                            return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
+                            return logLectureTitleMatches(
+                                fileName,
+                                lectureTitle,
+                                undefined,
+                                userName,
+                                userPosition
+                            ) && fileNameLower.includes(userLower);
                         });
                         data[row][col] = hasCompletion ? 'yes' : 'no';
                     }
