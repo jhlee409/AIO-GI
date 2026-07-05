@@ -21,6 +21,8 @@ export interface WatchTimeResult {
     thresholdReached: boolean;
 }
 
+export const ELAPSED_PLAYBACK_TRACKING_METHOD = 'elapsed-playback-v1';
+
 export function useSaveVideoWatchTime(options: UseSaveVideoWatchTimeOptions) {
     const {
         userEmail,
@@ -36,7 +38,7 @@ export function useSaveVideoWatchTime(options: UseSaveVideoWatchTimeOptions) {
         currentTime: number,
         totalDuration: number,
         action: 'update' | 'check',
-        actualWatchedTime?: number // 'check' 액션 시 실제 시청 시간 (maxWatchedTime)
+        actualWatchedTime?: number // 'check' 액션 시 실제 재생 elapsed seconds
     ): Promise<WatchTimeResult | null> => {
         if (!userEmail || !videoUrl || isNaN(currentTime) || isNaN(totalDuration) || totalDuration <= 0) {
             console.log('[useSaveVideoWatchTime] Missing required fields:', {
@@ -65,6 +67,7 @@ export function useSaveVideoWatchTime(options: UseSaveVideoWatchTimeOptions) {
                 category,
                 duration: totalDuration,
                 watchedTime: payloadWatchedTime,
+                trackingMethod: ELAPSED_PLAYBACK_TRACKING_METHOD,
                 action: action,
             };
             

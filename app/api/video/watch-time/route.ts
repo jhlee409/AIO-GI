@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
             category,
             duration, // 총 동영상 길이 (초)
             watchedTime, // 시청한 시간 (초)
+            trackingMethod,
             action // 'update' or 'check'
         } = await request.json();
 
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
                 category: category || '',
                 duration,
                 watchedTime,
+                trackingMethod: trackingMethod || 'current-time-v1',
                 lastUpdated: new Date(),
                 logCreated: shouldCreateLog,
                 sessionType: 'final' // 최종 저장된 세션임을 표시
@@ -99,6 +101,7 @@ export async function POST(request: NextRequest) {
                     category: category || '',
                     duration,
                     watchedTime,
+                    trackingMethod: trackingMethod || 'current-time-v1',
                     lastUpdated: new Date(),
                     logCreated: shouldCreateLog,
                     sessionType: 'checking' // 진행 중인 세션임을 표시
@@ -111,6 +114,7 @@ export async function POST(request: NextRequest) {
                 if (watchedTime > (currentData.watchedTime || 0)) {
                     await doc.ref.update({
                         watchedTime,
+                        trackingMethod: trackingMethod || currentData.trackingMethod || 'current-time-v1',
                         lastUpdated: new Date(),
                         logCreated: shouldCreateLog || currentData.logCreated
                     });
@@ -140,6 +144,7 @@ Video Title: ${videoTitle || 'Unknown'}
 Video URL: ${videoUrl}
 Duration: ${duration} seconds
 Watched Time: ${watchedTime} seconds (${((watchedTime / duration) * 100).toFixed(2)}%)
+Tracking Method: ${trackingMethod || 'current-time-v1'}
 Action: Video Play
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;

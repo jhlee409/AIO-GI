@@ -4464,7 +4464,7 @@ export default function CoursePage() {
                                                             setLoadingEvl(true);
                                                             setEvlError(null);
                                                             try {
-                                                                const videoFileName = 'EVL multiband 사용방법 및 demo.mp4';
+                                                                const videoFileName = 'EVL_orientation.mp4';
                                                                 const storagePath = `Simulator_training/EVL/${videoFileName}`;
                                                                 const response = await fetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`

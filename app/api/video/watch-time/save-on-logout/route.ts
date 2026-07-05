@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
                     category: data.category || '',
                     duration: duration,
                     watchedTime: watchedTime,
+                    trackingMethod: data.trackingMethod || 'current-time-v1',
                     lastUpdated: new Date(),
                     logCreated: data.logCreated || false,
                     sessionType: 'final'

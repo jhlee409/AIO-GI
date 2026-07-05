@@ -13,11 +13,59 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
     const { onThresholdReached, ...saveOptions } = options;
     const { saveWatchTime } = useSaveVideoWatchTime(saveOptions);
 
-    const [maxWatchedTime, setMaxWatchedTime] = useState(0);
+    const elapsedPlaybackSecondsRef = useRef(0);
+    const playbackStartedAtMsRef = useRef<number | null>(null);
+    const [elapsedPlaybackSeconds, setElapsedPlaybackSeconds] = useState(0);
     const [totalDuration, setTotalDuration] = useState(0);
     const [thresholdReached, setThresholdReached] = useState(false);
     const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastCheckTimeRef = useRef<number>(0);
+
+    const getNowMs = useCallback(() => {
+        if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+            return performance.now();
+        }
+        return Date.now();
+    }, []);
+
+    const getElapsedPlaybackSeconds = useCallback(() => {
+        const startedAtMs = playbackStartedAtMsRef.current;
+        if (startedAtMs === null) {
+            return elapsedPlaybackSecondsRef.current;
+        }
+
+        const runningSeconds = Math.max(0, (getNowMs() - startedAtMs) / 1000);
+        return elapsedPlaybackSecondsRef.current + runningSeconds;
+    }, [getNowMs]);
+
+    const syncElapsedPlaybackSeconds = useCallback(() => {
+        const elapsedSeconds = getElapsedPlaybackSeconds();
+        setElapsedPlaybackSeconds(elapsedSeconds);
+        return elapsedSeconds;
+    }, [getElapsedPlaybackSeconds]);
+
+    const markPlaybackStarted = useCallback(() => {
+        if (playbackStartedAtMsRef.current === null) {
+            playbackStartedAtMsRef.current = getNowMs();
+        }
+    }, [getNowMs]);
+
+    const markPlaybackStopped = useCallback(() => {
+        if (playbackStartedAtMsRef.current !== null) {
+            elapsedPlaybackSecondsRef.current = getElapsedPlaybackSeconds();
+            playbackStartedAtMsRef.current = null;
+            setElapsedPlaybackSeconds(elapsedPlaybackSecondsRef.current);
+        }
+    }, [getElapsedPlaybackSeconds]);
+
+    useEffect(() => {
+        elapsedPlaybackSecondsRef.current = 0;
+        playbackStartedAtMsRef.current = null;
+        setElapsedPlaybackSeconds(0);
+        setTotalDuration(0);
+        setThresholdReached(false);
+        lastCheckTimeRef.current = 0;
+    }, [saveOptions.videoUrl]);
 
     // 주기적으로 시청 시간 체크 및 저장 (30초마다)
     const trackWatchTime = useCallback((currentTime: number, duration: number) => {
@@ -30,28 +78,23 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         }
 
         setTotalDuration(duration);
-        
-        // 최대 시청 시간 업데이트
-        if (currentTime > maxWatchedTime) {
-            setMaxWatchedTime(currentTime);
-        }
+        const actualWatchedTime = syncElapsedPlaybackSeconds();
 
         // 30초마다 서버에 체크 (action: 'check')
         const now = Date.now();
         if (now - lastCheckTimeRef.current >= 30000) {
             lastCheckTimeRef.current = now;
-            const actualWatchedTime = Math.max(currentTime, maxWatchedTime);
             console.log('[useVideoWatchTime] 30s check - saving watch time:', {
                 currentTime,
                 actualWatchedTime,
                 duration,
                 percentage: (actualWatchedTime / duration * 100).toFixed(2) + '%'
             });
-            saveWatchTime(currentTime, duration, 'check', actualWatchedTime);
+            saveWatchTime(actualWatchedTime, duration, 'check');
         }
 
         // 80% 도달 체크
-        const percentage = (currentTime / duration) * 100;
+        const percentage = (actualWatchedTime / duration) * 100;
         if (percentage >= 80 && !thresholdReached) {
             setThresholdReached(true);
             console.log('[useVideoWatchTime] 80% threshold reached!');
@@ -59,15 +102,15 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
                 onThresholdReached();
             }
         }
-    }, [maxWatchedTime, thresholdReached, onThresholdReached, saveWatchTime]);
+    }, [thresholdReached, onThresholdReached, saveWatchTime, syncElapsedPlaybackSeconds]);
 
     // 최종 시청 시간 저장 (action: 'update')
     const saveFinalWatchTime = useCallback(async (currentTime: number, duration: number) => {
+        const actualWatchedTime = getElapsedPlaybackSeconds();
         console.log('[useVideoWatchTime] saveFinalWatchTime called:', {
             currentTime,
             duration,
-            maxWatchedTime,
-            actualWatchedTime: Math.max(currentTime, maxWatchedTime)
+            actualWatchedTime
         });
         
         if (isNaN(currentTime) || isNaN(duration) || duration <= 0) {
@@ -81,7 +124,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
             return null;
         }
         
-        const actualWatchedTime = Math.max(currentTime, maxWatchedTime);
+        setElapsedPlaybackSeconds(actualWatchedTime);
         console.log('[useVideoWatchTime] Calling saveWatchTime with update action:', {
             actualWatchedTime,
             duration,
@@ -90,7 +133,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         const result = await saveWatchTime(actualWatchedTime, duration, 'update');
         console.log('[useVideoWatchTime] saveWatchTime result:', result);
         return result;
-    }, [maxWatchedTime, saveWatchTime]);
+    }, [getElapsedPlaybackSeconds, saveWatchTime]);
 
     // 컴포넌트 언마운트 시 정리
     useEffect(() => {
@@ -101,14 +144,16 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         };
     }, []);
 
-    const percentage = totalDuration > 0 ? (maxWatchedTime / totalDuration) * 100 : 0;
+    const percentage = totalDuration > 0 ? (elapsedPlaybackSeconds / totalDuration) * 100 : 0;
 
     return {
         trackWatchTime,
         saveFinalWatchTime,
+        markPlaybackStarted,
+        markPlaybackStopped,
         thresholdReached,
         percentage,
-        maxWatchedTime,
+        elapsedPlaybackSeconds,
         totalDuration,
     };
 }

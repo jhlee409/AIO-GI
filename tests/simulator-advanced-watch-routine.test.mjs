@@ -29,6 +29,28 @@ assert.match(
   'Stent_Eso_GEjunction should use percentage watch-time tracking under Simulator Advanced Course'
 );
 
+const evlSectionStart = source.indexOf("selectedItem === 'evl'");
+const evlSectionEnd = source.indexOf("selectedItem === 'peg'", evlSectionStart);
+const evlSection = source.slice(evlSectionStart, evlSectionEnd);
+
+assert.ok(evlSectionStart > -1, 'EVL section should exist');
+assert.ok(evlSectionEnd > evlSectionStart, 'EVL section should have a bounded source section');
+assert.match(
+  evlSection,
+  /getVideoPlayerProps\('EVL', 'Simulator Advanced Course', 'percentage'\)/,
+  'EVL should keep the EVL report identity and percentage routine'
+);
+assert.match(
+  evlSection,
+  /const videoFileName = 'EVL_orientation\.mp4';[\s\S]*const storagePath = `Simulator_training\/EVL\/\$\{videoFileName\}`;/,
+  'EVL should play the orientation video from the EVL storage folder'
+);
+assert.doesNotMatch(
+  evlSection,
+  /const videoFileName = 'EVL multiband 사용방법 및 demo\.mp4';/,
+  'EVL should no longer load the multiband demo file'
+);
+
 const stentSectionStart = source.indexOf("selectedItem === 'stent-eso-ge-junction'");
 const stentSectionEnd = source.indexOf("selectedItem === 'egd-variation'", stentSectionStart);
 const stentSection = source.slice(stentSectionStart, stentSectionEnd);

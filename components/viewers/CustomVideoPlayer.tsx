@@ -77,7 +77,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             });
         }
     }, [videoTitle, category, completionMode, shouldTrackWatchTime, userEmail, userPosition, userName]);
-    const { trackWatchTime, saveFinalWatchTime } = useVideoWatchTime({
+    const { trackWatchTime, saveFinalWatchTime, markPlaybackStarted, markPlaybackStopped } = useVideoWatchTime({
         userEmail,
         userPosition,
         userName,
@@ -91,6 +91,8 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     // trackWatchTime과 saveFinalWatchTime을 ref로 저장하여 useEffect dependency 문제 방지
     const trackWatchTimeRef = useRef(trackWatchTime);
     const saveFinalWatchTimeRef = useRef(saveFinalWatchTime);
+    const markPlaybackStartedRef = useRef(markPlaybackStarted);
+    const markPlaybackStoppedRef = useRef(markPlaybackStopped);
 
     // 한 세션(= 같은 videoUrl 마운트 사이클)당 'final' 저장을 1회로 제한하기 위한 플래그.
     // Why: X 버튼·메뉴 변경·자연 종료·언마운트 cleanup 등 여러 경로가 모두 저장을 시도하여
@@ -100,7 +102,9 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     useEffect(() => {
         trackWatchTimeRef.current = trackWatchTime;
         saveFinalWatchTimeRef.current = saveFinalWatchTime;
-    }, [trackWatchTime, saveFinalWatchTime]);
+        markPlaybackStartedRef.current = markPlaybackStarted;
+        markPlaybackStoppedRef.current = markPlaybackStopped;
+    }, [trackWatchTime, saveFinalWatchTime, markPlaybackStarted, markPlaybackStopped]);
 
     // 새 동영상이 로드되면(즉 새 세션이 시작되면) 저장 플래그 리셋
     useEffect(() => {
@@ -134,6 +138,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                         percentage: finalDuration > 0 ? (finalTime / finalDuration * 100).toFixed(2) + '%' : 'N/A'
                     });
                     if (!isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0) {
+                        markPlaybackStoppedRef.current();
                         hasSavedFinalRef.current = true;
                         await saveFinalWatchTimeRef.current(finalTime, finalDuration);
                     } else {
@@ -198,13 +203,20 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             if (video.currentTime === 0 && hasSavedFinalRef.current) {
                 hasSavedFinalRef.current = false;
             }
+            markPlaybackStartedRef.current();
             setIsPlaying(true);
             // 동영상 재생 중임을 localStorage에 저장 (자동 로그아웃 방지)
             if (typeof window !== 'undefined') {
                 localStorage.setItem('isVideoPlaying', 'true');
             }
         };
+        const handlePlaying = () => {
+            if (!video.paused && !video.ended) {
+                markPlaybackStartedRef.current();
+            }
+        };
         const handlePause = (e?: Event) => {
+            markPlaybackStoppedRef.current();
             setIsPlaying(false);
             
             // 사용자가 의도적으로 일시정지하지 않은 경우에만 자동 재생
@@ -233,7 +245,19 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 }
             }
         };
+        const handleWaiting = () => {
+            markPlaybackStoppedRef.current();
+        };
+        const handleSeeking = () => {
+            markPlaybackStoppedRef.current();
+        };
+        const handleSeeked = () => {
+            if (!video.paused && !video.ended) {
+                markPlaybackStartedRef.current();
+            }
+        };
         const handleEnded = async () => {
+            markPlaybackStoppedRef.current();
             setIsPlaying(false);
             const finalTime = video.currentTime;
             const finalDuration = video.duration;
@@ -260,7 +284,11 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         video.addEventListener('loadeddata', handleLoadedData);
         video.addEventListener('canplay', handleCanPlay);
         video.addEventListener('play', handlePlay);
+        video.addEventListener('playing', handlePlaying);
         video.addEventListener('pause', handlePause);
+        video.addEventListener('waiting', handleWaiting);
+        video.addEventListener('seeking', handleSeeking);
+        video.addEventListener('seeked', handleSeeked);
         video.addEventListener('ended', handleEnded);
 
         // 최종 시청 시간 저장 함수 (외부에서 호출 가능)
@@ -281,6 +309,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             }
 
             if (shouldTrackWatchTime && saveFinalWatchTimeRef.current) {
+                markPlaybackStoppedRef.current();
                 const finalTime = video.currentTime;
                 const finalDuration = video.duration;
 
@@ -330,7 +359,11 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             video.removeEventListener('loadeddata', handleLoadedData);
             video.removeEventListener('canplay', handleCanPlay);
             video.removeEventListener('play', handlePlay);
+            video.removeEventListener('playing', handlePlaying);
             video.removeEventListener('pause', handlePause);
+            video.removeEventListener('waiting', handleWaiting);
+            video.removeEventListener('seeking', handleSeeking);
+            video.removeEventListener('seeked', handleSeeked);
             video.removeEventListener('ended', handleEnded);
         };
         // NOTE: 의도적으로 dependency를 videoUrl과 shouldTrackWatchTime으로만 제한합니다.
@@ -450,6 +483,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         const finalTime = video.currentTime;
         const finalDuration = video.duration;
         if (!isNaN(finalTime) && !isNaN(finalDuration) && finalDuration > 0) {
+            markPlaybackStoppedRef.current();
             hasSavedFinalRef.current = true;
             await saveFinalWatchTimeRef.current(finalTime, finalDuration);
         }
