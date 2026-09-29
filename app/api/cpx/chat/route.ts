@@ -68,32 +68,52 @@ export async function POST(request: NextRequest) {
             }))
         ];
 
-        // Call ChatGPT API
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                messages: chatMessages,
-                temperature: 0.7,
-                max_tokens: getCpxChatMaxTokens(),
-            }),
-        });
+        const initialTokenLimit = getCpxChatMaxTokens();
+        const tokenLimits = [initialTokenLimit, Math.max(8192, initialTokenLimit * 2)];
+        let assistantMessage = '';
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('OpenAI API error:', errorData);
-            return NextResponse.json(
-                { error: errorData.error?.message || 'Failed to get response from ChatGPT' },
-                { status: response.status }
-            );
+        // Reasoning tokens count toward the completion limit. Retry once if they
+        // consume the answer budget or the visible response is cut short.
+        for (const maxCompletionTokens of tokenLimits) {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: 'gpt-6-luna',
+                    messages: chatMessages,
+                    reasoning_effort: 'low',
+                    max_completion_tokens: maxCompletionTokens,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('OpenAI API error:', errorData);
+                return NextResponse.json(
+                    { error: errorData.error?.message || 'Failed to get response from ChatGPT' },
+                    { status: response.status }
+                );
+            }
+
+            const data = await response.json();
+            const choice = data.choices?.[0];
+            assistantMessage = choice?.message?.content?.trim() || '';
+            if (assistantMessage && choice?.finish_reason === 'stop') {
+                break;
+            }
+            assistantMessage = '';
         }
 
-        const data = await response.json();
-        const assistantMessage = data.choices[0]?.message?.content || '';
+        if (!assistantMessage) {
+            console.error('OpenAI API returned no complete CPX chat response');
+            return NextResponse.json(
+                { error: '환자 답변을 완성하지 못했습니다. 다시 시도해 주세요.' },
+                { status: 502 }
+            );
+        }
 
         // Check if conversation should end
         const isEnded = assistantMessage.includes(CPX_FINAL_CLOSING_MESSAGE) ||

@@ -1,6 +1,7 @@
-const DEFAULT_CPX_CHAT_MAX_TOKENS = 250;
-const MIN_CPX_CHAT_MAX_TOKENS = 50;
-const MAX_CPX_CHAT_MAX_TOKENS = 1000;
+// Includes both reasoning tokens and the patient-facing reply for GPT-6 Luna.
+const DEFAULT_CPX_CHAT_MAX_TOKENS = 2048;
+const MIN_CPX_CHAT_MAX_TOKENS = 512;
+const MAX_CPX_CHAT_MAX_TOKENS = 8192;
 
 function normalizeCpxChatMaxTokens(value: unknown): number | null {
     const maxTokens = Number(value);

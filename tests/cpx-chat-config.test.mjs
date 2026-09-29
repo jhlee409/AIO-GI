@@ -20,7 +20,7 @@ vm.runInNewContext(compiled.outputText, sandbox);
 
 const { getCpxChatMaxTokens } = sandbox.module.exports;
 
-assert.equal(getCpxChatMaxTokens({}), 250);
-assert.equal(getCpxChatMaxTokens({ CPX_CHAT_MAX_TOKENS: '180' }), 180);
-assert.equal(getCpxChatMaxTokens({ CPX_CHAT_MAX_TOKENS: '20' }), 250);
-assert.equal(getCpxChatMaxTokens({ CPX_CHAT_MAX_TOKENS: 'fast' }), 250);
+assert.equal(getCpxChatMaxTokens({}), 2048);
+assert.equal(getCpxChatMaxTokens({ CPX_CHAT_MAX_TOKENS: '4096' }), 4096);
+assert.equal(getCpxChatMaxTokens({ CPX_CHAT_MAX_TOKENS: '250' }), 2048);
+assert.equal(getCpxChatMaxTokens({ CPX_CHAT_MAX_TOKENS: 'fast' }), 2048);
