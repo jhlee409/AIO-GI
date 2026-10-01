@@ -11,6 +11,7 @@ import { getUserRole } from '@/lib/auth';
 import type { UserRole } from '@/types';
 import { useAutoLogout } from '@/lib/hooks/useAutoLogout';
 import { useSessionActivity } from '@/lib/hooks/useSessionActivity';
+import { LearningLogoutReview } from '@/components/LearningLogoutReview';
 
 interface AuthContextType {
     user: User | null;
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <AuthContext.Provider value={{ user, role, loading }}>
+            <LearningLogoutReview user={user} />
             {children}
             {/* Auto logout warning message */}
             {showWarning && user && (

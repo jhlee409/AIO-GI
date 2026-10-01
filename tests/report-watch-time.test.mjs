@@ -21,6 +21,7 @@ const {
   findWatchTimeReportMatch,
   formatWatchTimeReportValue,
   isTrackedF1WatchTimeLecture,
+  isHemostasisCaseVideo,
   shouldTrackVideoWatchRoutine,
   watchTimeTitlesMatch,
 } = sandbox.module.exports;
@@ -30,6 +31,10 @@ assert.equal(isTrackedF1WatchTimeLecture('Fundamentals_of_NVUGIB_Management'), t
 assert.equal(isTrackedF1WatchTimeLecture('NVUGIB 총론 강의'), false);
 assert.equal(isTrackedF1WatchTimeLecture('Complication'), false);
 assert.equal(isTrackedF1WatchTimeLecture('AP'), false);
+assert.equal(isHemostasisCaseVideo('angiodysplasia_01'), true);
+assert.equal(isHemostasisCaseVideo('angiodysplasia_01.mp4'), true);
+assert.equal(isHemostasisCaseVideo('NVUGIB case: angiodysplasia_01'), true);
+assert.equal(isHemostasisCaseVideo('NVUGIB_overview'), false);
 
 for (const simulatorLectureTitle of [
   'Hemoclip',

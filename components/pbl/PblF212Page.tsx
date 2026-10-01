@@ -4,12 +4,12 @@
  */
 'use client';
 
+import { trackedLearningFetch } from '@/lib/learning-session';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FileText, AlertCircle, Home, LogOut, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase-client';
 
 interface ConversationStep {
     step: number;
@@ -472,13 +472,7 @@ export function PblF212Page({ onClose }: PblF212PageProps) {
 
     // 로그아웃
     const handleLogout = async () => {
-        if (!auth) {
-            console.error('Firebase Auth is not initialized');
-            return;
-        }
-        await saveWatchTimeBeforeNavigation();
-        await signOut(auth);
-        router.push('/login');
+        window.dispatchEvent(new Event('requestVerifiedLogout'));
     };
 
     useEffect(() => {
@@ -525,7 +519,7 @@ Action: PBL Started
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                    const response = await fetch('/api/log/create', {
+                    const response = await trackedLearningFetch('/api/log/create', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

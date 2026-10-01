@@ -1,3 +1,4 @@
+import { getVideoAttemptId, trackedLearningFetch } from '@/lib/learning-session';
 /**
  * Hook for saving video watch time
  * Sends video watch time data to the API endpoint
@@ -68,6 +69,7 @@ export function useSaveVideoWatchTime(options: UseSaveVideoWatchTimeOptions) {
                 duration: totalDuration,
                 watchedTime: payloadWatchedTime,
                 trackingMethod: ELAPSED_PLAYBACK_TRACKING_METHOD,
+                attemptId: getVideoAttemptId(userEmail, videoUrl, category),
                 action: action,
             };
             
@@ -80,7 +82,7 @@ export function useSaveVideoWatchTime(options: UseSaveVideoWatchTimeOptions) {
                 duration: totalDuration
             });
             
-            const response = await fetch('/api/video/watch-time', {
+            const response = await trackedLearningFetch('/api/video/watch-time', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

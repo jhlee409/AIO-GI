@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
             duration, // 총 동영상 길이 (초)
             watchedTime, // 시청한 시간 (초)
             trackingMethod,
+            attemptId,
             action // 'update' or 'check'
         } = await request.json();
 
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
                 duration,
                 watchedTime,
                 trackingMethod: trackingMethod || 'current-time-v1',
+                attemptId: attemptId || '',
                 lastUpdated: new Date(),
                 logCreated: shouldCreateLog,
                 sessionType: 'final' // 최종 저장된 세션임을 표시
@@ -102,6 +104,7 @@ export async function POST(request: NextRequest) {
                     duration,
                     watchedTime,
                     trackingMethod: trackingMethod || 'current-time-v1',
+                    attemptId: attemptId || '',
                     lastUpdated: new Date(),
                     logCreated: shouldCreateLog,
                     sessionType: 'checking' // 진행 중인 세션임을 표시
@@ -115,6 +118,7 @@ export async function POST(request: NextRequest) {
                     await doc.ref.update({
                         watchedTime,
                         trackingMethod: trackingMethod || currentData.trackingMethod || 'current-time-v1',
+                        attemptId: attemptId || currentData.attemptId || '',
                         lastUpdated: new Date(),
                         logCreated: shouldCreateLog || currentData.logCreated
                     });

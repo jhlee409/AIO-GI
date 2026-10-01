@@ -9,8 +9,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { FileUp, Users, LogOut, Home, BookOpen, Settings, GraduationCap } from 'lucide-react';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase-client';
 
 export default function AdminLayout({
     children,
@@ -158,16 +156,7 @@ export default function AdminLayout({
     };
 
     const handleLogout = async () => {
-        if (!auth) {
-            console.error('Firebase Auth is not initialized');
-            return;
-        }
-
-        // 로그아웃 전에 진행 중인 시청 시간 저장
-        await saveWatchTimeBeforeNavigation();
-
-        await signOut(auth);
-        router.push('/login');
+        window.dispatchEvent(new Event('requestVerifiedLogout'));
     };
 
     // 홈 버튼 클릭 핸들러

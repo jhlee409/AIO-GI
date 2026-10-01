@@ -7,6 +7,7 @@ import {
     findWatchTimeReportMatch,
     formatWatchTimeReportValue,
     isTrackedF1WatchTimeLecture,
+    isHemostasisCaseVideo,
     watchTimeTitlesMatch,
 } from '@/lib/report-watch-time';
 import { logLectureTitleMatches } from '@/lib/report-log-match';
@@ -825,7 +826,8 @@ export async function POST(request: NextRequest) {
                     const watchTimeMatch = userEmail && watchTimeMap.has(userEmail)
                         ? findWatchTimeReportMatch(watchTimeMap.get(userEmail)!, lectureTitle, category)
                         : null;
-                    const shouldUseWatchTimeRoutine = finalIsDxEgdLectureRow || !!watchTimeMatch;
+                    const isHemostasisCaseRow = isHemostasisCaseVideo(lectureTitle);
+                    const shouldUseWatchTimeRoutine = finalIsDxEgdLectureRow || isHemostasisCaseRow || !!watchTimeMatch;
 
                     if (shouldUseWatchTimeRoutine) {
                         console.log(`[동영상 시청 루틴 매칭] User: ${userName}, Email: ${userEmail}, Lecture: "${lectureTitle}", Category: "${category}"`);
@@ -834,7 +836,10 @@ export async function POST(request: NextRequest) {
                         if (watchTimeMatch && watchTimeMatch.watchTime.duration > 0) {
                             const totalPercentage = watchTimeMatch.watchTime.totalPercentage || 0;
                             console.log(`[동영상 시청 루틴 매칭] Final match: Key="${watchTimeMatch.key}", Score=${watchTimeMatch.score}, Percentage=${totalPercentage}%`);
-                            newData[row][col] = formatWatchTimeReportValue(totalPercentage);
+                            // Preserve credit from legacy case logs created under the old play-to-complete rule.
+                            newData[row][col] = isHemostasisCaseRow && hasCompletion && totalPercentage < 80
+                                ? 'yes'
+                                : formatWatchTimeReportValue(totalPercentage);
                             if (isWithin24Hours(watchTimeMatch.watchTime.lastUpdated)) {
                                 recentlyChangedCells.push([row, col]);
                             }

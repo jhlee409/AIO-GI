@@ -27,6 +27,27 @@ export const TRACKED_F1_WATCH_TIME_LECTURE_TITLES = [
     'Stent_Eso_GEjunction',
 ];
 
+export const HEMOSTASIS_CASE_VIDEO_TITLES = [
+    'angiodysplasia_01', 'angiodysplasia_02', 'barogenic_tear_01',
+    'cancer_bleeding_01', 'cancer_bleeding_02',
+    'Dieulafoy_01', 'Dieulafoy_02', 'Dieulafoy_03',
+    'diffuse_oozing_01', 'MW_tear_01', 'MW_tear_02',
+    'ESD_ulcer_01', 'ESD_ulcer_02',
+    'ulcer_base_01', 'ulcer_base_02', 'ulcer_base_03',
+];
+
+export function resolveHemostasisCaseTitle(title?: string | null): string | undefined {
+    const normalized = normalizeWatchTimeTitle(title);
+    return HEMOSTASIS_CASE_VIDEO_TITLES.find(caseTitle =>
+        normalized === normalizeWatchTimeTitle(caseTitle) ||
+        normalized.includes(normalizeWatchTimeTitle(caseTitle))
+    );
+}
+
+export function isHemostasisCaseVideo(title?: string | null): boolean {
+    return Boolean(resolveHemostasisCaseTitle(title));
+}
+
 const WATCH_TIME_TITLE_ALIASES = [
     [
         '내과전공의를 위한 NVUGIB Mx의 기초',
@@ -129,7 +150,7 @@ export function findWatchTimeReportMatch<T extends WatchTimeReportEntry>(
     lectureTitle?: string | null,
     category?: string | null
 ): WatchTimeReportMatch<T> | null {
-    const lectureTitleLower = String(lectureTitle || '').toLowerCase().trim();
+    const lectureTitleLower = String(resolveHemostasisCaseTitle(lectureTitle) || lectureTitle || '').toLowerCase().trim();
     if (!lectureTitleLower) {
         return null;
     }

@@ -26,6 +26,7 @@
 import { useState, useCallback } from 'react';
 import { VideoUploadType, VIDEO_UPLOAD_PATHS } from '@/lib/video-upload-utils';
 import { InstructorInfo } from '@/lib/instructor-utils';
+import { recordLearningLogAttempt, trackedLearningFetch } from '@/lib/learning-session';
 
 export interface UserProfile {
     position: string;
@@ -152,6 +153,13 @@ export function useVideoUpload(options: UseVideoUploadOptions): UseVideoUploadRe
                 throw error;
             }
 
+            recordLearningLogAttempt({
+                email: user.email,
+                key: `log/${userProfile.position}-${userProfile.name}-${videoType.toUpperCase()}`,
+                label: `${videoType.toUpperCase()} 동영상 업로드`,
+                completedLocally: false,
+            });
+
             // 파일명 및 경로 생성
             const fileName = file.name.toLowerCase();
             const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
@@ -226,7 +234,7 @@ export function useVideoUpload(options: UseVideoUploadOptions): UseVideoUploadRe
             // 업로드 완료 후 메타데이터를 API로 전송
             const videoUrl = await getDownloadURL(uploadTask.snapshot.ref);
 
-            const response = await fetch(apiEndpoint, {
+            const response = await trackedLearningFetch(apiEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSaveVideoWatchTime, UseSaveVideoWatchTimeOptions } from './useSaveVideoWatchTime';
+import { getVideoAttemptId, recordVideoProgress, startVideoAttempt } from '@/lib/learning-session';
 
 export interface UseVideoWatchTimeOptions extends UseSaveVideoWatchTimeOptions {
     onThresholdReached?: () => void;
@@ -46,9 +47,17 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
 
     const markPlaybackStarted = useCallback(() => {
         if (playbackStartedAtMsRef.current === null) {
+            if (elapsedPlaybackSecondsRef.current === 0) {
+                startVideoAttempt({
+                    email: saveOptions.userEmail,
+                    videoUrl: saveOptions.videoUrl,
+                    videoTitle: saveOptions.videoTitle,
+                    category: saveOptions.category,
+                });
+            }
             playbackStartedAtMsRef.current = getNowMs();
         }
-    }, [getNowMs]);
+    }, [getNowMs, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
 
     const markPlaybackStopped = useCallback(() => {
         if (playbackStartedAtMsRef.current !== null) {
@@ -79,6 +88,22 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
 
         setTotalDuration(duration);
         const actualWatchedTime = syncElapsedPlaybackSeconds();
+        if (saveOptions.userEmail && !getVideoAttemptId(saveOptions.userEmail, saveOptions.videoUrl, saveOptions.category)) {
+            startVideoAttempt({
+                email: saveOptions.userEmail,
+                videoUrl: saveOptions.videoUrl,
+                videoTitle: saveOptions.videoTitle,
+                category: saveOptions.category,
+            });
+        }
+        recordVideoProgress({
+            email: saveOptions.userEmail,
+            videoUrl: saveOptions.videoUrl,
+            videoTitle: saveOptions.videoTitle,
+            category: saveOptions.category,
+            watchedTime: actualWatchedTime,
+            duration,
+        });
 
         // 30초마다 서버에 체크 (action: 'check')
         const now = Date.now();
@@ -102,7 +127,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
                 onThresholdReached();
             }
         }
-    }, [thresholdReached, onThresholdReached, saveWatchTime, syncElapsedPlaybackSeconds]);
+    }, [thresholdReached, onThresholdReached, saveWatchTime, syncElapsedPlaybackSeconds, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
 
     // 최종 시청 시간 저장 (action: 'update')
     const saveFinalWatchTime = useCallback(async (currentTime: number, duration: number) => {
@@ -125,6 +150,22 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         }
         
         setElapsedPlaybackSeconds(actualWatchedTime);
+        if (saveOptions.userEmail && !getVideoAttemptId(saveOptions.userEmail, saveOptions.videoUrl, saveOptions.category)) {
+            startVideoAttempt({
+                email: saveOptions.userEmail,
+                videoUrl: saveOptions.videoUrl,
+                videoTitle: saveOptions.videoTitle,
+                category: saveOptions.category,
+            });
+        }
+        recordVideoProgress({
+            email: saveOptions.userEmail,
+            videoUrl: saveOptions.videoUrl,
+            videoTitle: saveOptions.videoTitle,
+            category: saveOptions.category,
+            watchedTime: actualWatchedTime,
+            duration,
+        });
         console.log('[useVideoWatchTime] Calling saveWatchTime with update action:', {
             actualWatchedTime,
             duration,
@@ -133,7 +174,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         const result = await saveWatchTime(actualWatchedTime, duration, 'update');
         console.log('[useVideoWatchTime] saveWatchTime result:', result);
         return result;
-    }, [getElapsedPlaybackSeconds, saveWatchTime]);
+    }, [getElapsedPlaybackSeconds, saveWatchTime, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
 
     // 컴포넌트 언마운트 시 정리
     useEffect(() => {

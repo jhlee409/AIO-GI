@@ -4,6 +4,8 @@
  */
 'use client';
 
+import { recordLearningLogAttempt, trackedLearningFetch } from '@/lib/learning-session';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -14,7 +16,7 @@ import { convertBmpToJpg, isBmpFile } from '@/lib/image-converter';
 import { useVideoUpload } from '@/lib/hooks/useVideoUpload';
 import { InstructorInfo } from '@/lib/instructor-utils';
 import { isAdmin } from '@/lib/auth';
-import type { VideoCompletionMode } from '@/lib/report-watch-time';
+import { HEMOSTASIS_CASE_VIDEO_TITLES, type VideoCompletionMode } from '@/lib/report-watch-time';
 import dynamic from 'next/dynamic';
 import { courseConfig, CourseItem, CourseSection } from './config/courseConfig';
 import { removeEmptyLines, removeEmptyLinesAndUnderscores } from './utils/textUtils';
@@ -222,7 +224,6 @@ export default function CoursePage() {
     const [nvugibCaseError, setNvugibCaseError] = useState<string | null>(null);
     const [showNvugibCase, setShowNvugibCase] = useState(false);
     const [selectedNvugibCase, setSelectedNvugibCase] = useState<string | null>(null);
-    const [nvugibCaseLogCreated, setNvugibCaseLogCreated] = useState<Set<string>>(new Set());
 
     // Diagnostic EUS lecture video states
     const [diagnosticEusVideoUrl, setDiagnosticEusVideoUrl] = useState<string | null>(null);
@@ -294,24 +295,7 @@ export default function CoursePage() {
     ];
 
     // NVUGIB case 목록
-    const nvugibCases = [
-        'angiodysplasia_01',
-        'angiodysplasia_02',
-        'barogenic_tear_01',
-        'cancer_bleeding_01',
-        'cancer_bleeding_02',
-        'Dieulafoy_01',
-        'Dieulafoy_02',
-        'Dieulafoy_03',
-        'diffuse_oozing_01',
-        'MW_tear_01',
-        'MW_tear_02',
-        'ESD_ulcer_01',
-        'ESD_ulcer_02',
-        'ulcer_base_01',
-        'ulcer_base_02',
-        'ulcer_base_03',
-    ];
+    const nvugibCases = HEMOSTASIS_CASE_VIDEO_TITLES;
 
     // EGD variation 목록 (이미지와 동일한 레이아웃)
     const egdVariationItems = [
@@ -583,6 +567,14 @@ export default function CoursePage() {
             alert(`이미지는 ${imageMin}개에서 ${imageMax}개 사이여야 합니다. 현재: ${imageFiles.length}개`);
             return;
         }
+
+        const emtLogKey = `log/${userProfile.position}-${userProfile.name}-${emtVersion === 'EMT-L' ? 'EMT-L' : 'EMT'}`;
+        recordLearningLogAttempt({
+            email: user.email,
+            key: emtLogKey,
+            label: `${emtVersion} 분석`,
+            completedLocally: false,
+        });
 
         // Hide video players
         setShowEmtOrientation(false);
@@ -901,6 +893,12 @@ export default function CoursePage() {
                             // Check if analysis passed
                             if (result.analysisPassed) {
                                 emtAnalysisPassed = true;
+                                recordLearningLogAttempt({
+                                    email: user.email,
+                                    key: emtLogKey,
+                                    label: `${emtVersion} 분석`,
+                                    completedLocally: true,
+                                });
                                 // 디버깅: 콘솔에 값 출력
                                 console.log(`=== ${emtVersion} 분석 성공 결과 ===`);
                                 console.log('result:', result);
@@ -1765,9 +1763,12 @@ export default function CoursePage() {
         };
 
         // 커스텀 이벤트: 홈 버튼 클릭 등으로 인한 명시적 저장 요청
-        const handleSaveWatchTime = async () => {
+        const handleSaveWatchTime = (event: Event) => {
             if (!isUnmounting) {
-                await saveCurrentVideoWatchTime();
+                const save = saveCurrentVideoWatchTime();
+                const detail = (event as CustomEvent<{ promises?: Promise<unknown>[] }>).detail;
+                if (detail?.promises) detail.promises.push(save);
+                else void save.catch(error => console.error('Error saving watch time:', error));
             }
         };
 
@@ -4529,7 +4530,7 @@ Action: Video Play
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                                                            const response = await fetch('/api/log/create', {
+                                                            const response = await trackedLearningFetch('/api/log/create', {
                                                                 method: 'POST',
                                                                 headers: {
                                                                     'Content-Type': 'application/json',
@@ -4711,7 +4712,7 @@ Action: Video Play
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                                                            const response = await fetch('/api/log/create', {
+                                                            const response = await trackedLearningFetch('/api/log/create', {
                                                                 method: 'POST',
                                                                 headers: {
                                                                     'Content-Type': 'application/json',
@@ -4964,42 +4965,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 ref={nvugibCasePlayerRef}
                                                 isOpen={showNvugibCase}
                                                 videoUrl={nvugibCaseVideoUrl}
-                                                onPlay={async () => {
-                                                    // Create log file when video starts playing
-                                                    if (selectedNvugibCase && userProfile && !nvugibCaseLogCreated.has(selectedNvugibCase)) {
-                                                        try {
-                                                            const logFileName = `${userProfile.position}-${userProfile.name}-${selectedNvugibCase}`;
-                                                            const logContent = `Position: ${userProfile.position}
-Name: ${userProfile.name}
-Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
-Category: Advanced course for F1
-Section: 치료 내시경 임상
-Item: NVUGIB case 해설
-Case: ${selectedNvugibCase}
-Action: Video Play
-Timestamp: ${new Date().toISOString()}
-Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                            const response = await fetch('/api/log/create', {
-                                                                method: 'POST',
-                                                                headers: {
-                                                                    'Content-Type': 'application/json',
-                                                                },
-                                                                body: JSON.stringify({
-                                                                    fileName: logFileName,
-                                                                    content: logContent,
-                                                                }),
-                                                            });
-
-                                                            if (response.ok) {
-                                                                setNvugibCaseLogCreated(prev => new Set(prev).add(selectedNvugibCase));
-                                                            }
-                                                        } catch (error) {
-                                                            console.error('Error creating log file:', error);
-                                                        }
-                                                    }
-                                                }}
+                                                {...getVideoPlayerProps(selectedNvugibCase || 'NVUGIB case', 'Advanced course for F1', 'percentage')}
                                                 onClose={() => {
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
@@ -5154,7 +5120,7 @@ Action: Video Play
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                                                            const response = await fetch('/api/log/create', {
+                                                            const response = await trackedLearningFetch('/api/log/create', {
                                                                 method: 'POST',
                                                                 headers: {
                                                                     'Content-Type': 'application/json',
@@ -5539,7 +5505,7 @@ Action: Progress Button Click
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                                                                    const response = await fetch('/api/log/egd-lesion-dx', {
+                                                                    const response = await trackedLearningFetch('/api/log/egd-lesion-dx', {
                                                                         method: 'POST',
                                                                         headers: {
                                                                             'Content-Type': 'application/json',
@@ -5622,6 +5588,15 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
                                                                     setSelectedEgdDxImage(imageName);
+                                                                    if (user?.email && userProfile) {
+                                                                        const imageBase = imageName.replace(/\.[^/.]+$/, '');
+                                                                        recordLearningLogAttempt({
+                                                                            email: user.email,
+                                                                            key: `log_EGD_Lesion_Dx/${userProfile.position}-${userProfile.name}-F1_${imageBase}`,
+                                                                            label: `EGD lesion Dx F1: ${imageBase}`,
+                                                                            completedLocally: false,
+                                                                        });
+                                                                    }
                                                                     setLoadingEgdDxImage(true);
                                                                     setEgdDxImageError(null);
                                                                     setEgdDxInstruction1('');
@@ -5836,7 +5811,7 @@ Action: Progress Button Click
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                                                                    const response = await fetch('/api/log/egd-lesion-dx', {
+                                                                    const response = await trackedLearningFetch('/api/log/egd-lesion-dx', {
                                                                         method: 'POST',
                                                                         headers: {
                                                                             'Content-Type': 'application/json',
@@ -5919,6 +5894,15 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
                                                                     setSelectedEgdDxImageF2(imageName);
+                                                                    if (user?.email && userProfile) {
+                                                                        const imageBase = imageName.replace(/\.[^/.]+$/, '');
+                                                                        recordLearningLogAttempt({
+                                                                            email: user.email,
+                                                                            key: `log_EGD_Lesion_Dx/${userProfile.position}-${userProfile.name}-F2_${imageBase}`,
+                                                                            label: `EGD lesion Dx F2: ${imageBase}`,
+                                                                            completedLocally: false,
+                                                                        });
+                                                                    }
                                                                     setLoadingEgdDxImageF2(true);
                                                                     setEgdDxImageErrorF2(null);
                                                                     setEgdDxInstruction1F2('');
@@ -6326,7 +6310,7 @@ Action: Video Play
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                                                            const response = await fetch('/api/log/create', {
+                                                            const response = await trackedLearningFetch('/api/log/create', {
                                                                 method: 'POST',
                                                                 headers: {
                                                                     'Content-Type': 'application/json',

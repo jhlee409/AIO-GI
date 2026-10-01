@@ -4,6 +4,8 @@
  */
 'use client';
 
+import { trackedLearningFetch } from '@/lib/learning-session';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, X, Mic, MicOff, Volume2, Loader2, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
@@ -473,7 +475,7 @@ Action: CPX Chat Started
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
-                    const response = await fetch('/api/log/create', {
+                    const response = await trackedLearningFetch('/api/log/create', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
