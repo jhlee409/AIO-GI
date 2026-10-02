@@ -20,6 +20,13 @@ assert.match(
 
 assert.match(
   source,
-  /getVideoPlayerProps\(selectedNvugibOverviewLecture\?\.title \|\| 'NVUGIB 총론 강의', 'Advanced course for F1'\)/,
-  'NVUGIB overview player should pass video title and Advanced F1 category for watch-time tracking'
+  /getVideoPlayerProps\(selectedNvugibOverviewLecture\?\.title \|\| 'NVUGIB 총론 강의', 'Advanced course for F1', 'percentage'\)/,
+  'NVUGIB overview player should require 80% viewing'
 );
+
+const diagnosticEusPlayer = source.slice(source.indexOf("selectedItem === 'diagnostic-eus-lecture'"));
+assert.match(diagnosticEusPlayer, /completionMode="percentage"/);
+for (const title of ['EUS_basic', 'EUS_SET', 'EUS_case']) {
+  assert.match(diagnosticEusPlayer, new RegExp(`const lectureName = '${title}'`));
+}
+assert.doesNotMatch(diagnosticEusPlayer.slice(0, diagnosticEusPlayer.indexOf('onClose=')), /onPlay=|completionLogKey=/);

@@ -4,6 +4,7 @@
  * Deletes videos from: MT/MT_result, EMT/EMT_result, EMT/EMT_visualization, LHT/LHT_result, SHT/SHT_result
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 
 interface FileInfo {
@@ -14,6 +15,8 @@ interface FileInfo {
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { action, users } = await request.json();
 

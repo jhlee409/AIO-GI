@@ -9,6 +9,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase-client';
 import { useRouter } from 'next/navigation';
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 
 const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes in milliseconds
 const WARNING_TIME = 9 * 60 * 1000; // 9 minutes (1 minute before logout)
@@ -115,6 +116,11 @@ export function useAutoLogout() {
                     }
                 }
                 try {
+                    await authenticatedFetch('/api/video/watch-time/save-on-logout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: auth.currentUser.email }),
+                    });
                     await signOut(auth);
                     router.push('/login');
                 } catch (error) {

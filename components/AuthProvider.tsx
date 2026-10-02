@@ -5,13 +5,20 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, onIdTokenChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase-client';
 import { getUserRole } from '@/lib/auth';
 import type { UserRole } from '@/types';
 import { useAutoLogout } from '@/lib/hooks/useAutoLogout';
 import { useSessionActivity } from '@/lib/hooks/useSessionActivity';
-import { LearningLogoutReview } from '@/components/LearningLogoutReview';
+import { LearningLogoutHandler } from '@/components/LearningLogoutHandler';
+import { setLearningTokenProvider } from '@/lib/learning-session';
+import { setCachedIdToken } from '@/lib/client-authenticated-fetch';
+
+setLearningTokenProvider(async () => {
+    if (auth) await auth.authStateReady();
+    return auth?.currentUser?.getIdToken() ?? null;
+});
 
 interface AuthContextType {
     user: User | null;
@@ -34,6 +41,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useSessionActivity();
 
     useEffect(() => {
+        const currentAuth = auth;
+        if (!currentAuth) return;
+        return onIdTokenChanged(currentAuth, async currentUser => {
+            if (!currentUser) {
+                setCachedIdToken(null);
+                return;
+            }
+            const token = await currentUser.getIdToken();
+            if (currentAuth.currentUser?.uid === currentUser.uid) setCachedIdToken(token);
+        });
+    }, []);
+
+    useEffect(() => {
         if (!auth) {
             setLoading(false);
             return;
@@ -46,25 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!user && typeof window !== 'undefined') {
                 const sessionId = localStorage.getItem('sessionId');
                 const email = localStorage.getItem('userEmail');
-                
-                // 로그아웃 시 진행 중인 시청 시간 저장
-                if (email) {
-                    try {
-                        await fetch('/api/video/watch-time/save-on-logout', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                email: email
-                            }),
-                            keepalive: true, // 로그아웃 시에도 요청이 완료되도록 보장
-                        });
-                    } catch (error) {
-                        console.error('Failed to save watch time on logout:', error);
-                        // 에러가 발생해도 계속 진행
-                    }
-                }
                 
                 if (sessionId && email) {
                     try {
@@ -96,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <AuthContext.Provider value={{ user, role, loading }}>
-            <LearningLogoutReview user={user} />
+            <LearningLogoutHandler user={user} />
             {children}
             {/* Auto logout warning message */}
             {showWarning && user && (

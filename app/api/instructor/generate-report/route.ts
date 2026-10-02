@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
-import { isAdminEmail } from '@/lib/auth-server';
+import { requireInstructor } from '@/lib/api-auth';
 import { calculateAccumulatedWatchTime } from '@/lib/hooks/useCalculateAccumulatedWatchTime';
 import {
     TRACKED_F1_WATCH_TIME_LECTURE_TITLES,
@@ -10,7 +10,7 @@ import {
     isHemostasisCaseVideo,
     watchTimeTitlesMatch,
 } from '@/lib/report-watch-time';
-import { logLectureTitleMatches } from '@/lib/report-log-match';
+import { isReportableLearningLog, logLectureTitleMatches } from '@/lib/report-log-match';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -63,6 +63,8 @@ function logIdentityMatchesUser(content: string | undefined, userEmail: string, 
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireInstructor(request);
+    if (access instanceof NextResponse) return access;
     try {
         let requestBody;
         try {
@@ -77,7 +79,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { hospitals, positions, name, categories, userEmail } = requestBody;
+        let { hospitals } = requestBody;
+        const { positions, name, categories } = requestBody;
 
         const normalizeCategory = (cat: string): string =>
             cat.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -100,65 +103,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 서버 측 검증: 교육자는 병원 정보가 있어야 하고, 자신의 병원만 선택 가능
-        if (userEmail && !isAdminEmail(userEmail)) {
-            const adminDb = getAdminDb();
-
-            let snapshot = await adminDb.collection('users')
-                .where('이메일', '==', userEmail)
-                .limit(1)
-                .get();
-
-            if (snapshot.empty) {
-                snapshot = await adminDb.collection('users')
-                    .where('email', '==', userEmail)
-                    .limit(1)
-                    .get();
+        if (!access.isAdmin) {
+            if (Array.isArray(hospitals) && hospitals.some((hospital: unknown) => hospital !== access.hospital)) {
+                return NextResponse.json({ success: false, error: '자신이 속한 병원만 선택할 수 있습니다.' }, { status: 403 });
             }
-
-            if (snapshot.empty) {
-                snapshot = await adminDb.collection('patients')
-                    .where('이메일', '==', userEmail)
-                    .limit(1)
-                    .get();
-            }
-
-            if (snapshot.empty) {
-                snapshot = await adminDb.collection('patients')
-                    .where('email', '==', userEmail)
-                    .limit(1)
-                    .get();
-            }
-
-            if (!snapshot.empty) {
-                const userData = snapshot.docs[0].data();
-                const userHospital = String(userData['병원'] || userData['병원명'] || userData['hospital'] || '').trim();
-
-                // 교육자에게 병원 정보가 없으면 접근 차단
-                if (!userHospital) {
-                    return NextResponse.json(
-                        {
-                            success: false,
-                            error: '병원 정보가 등록되어 있지 않아 접근할 수 없습니다. 관리자에게 문의하세요.'
-                        },
-                        { status: 403 }
-                    );
-                }
-
-                // 교육자가 자신의 병원이 아닌 다른 병원을 선택했는지 확인
-                if (hospitals && Array.isArray(hospitals) && hospitals.length > 0) {
-                    const hasInvalidHospital = hospitals.some((hospital: string) => hospital !== userHospital);
-                    if (hasInvalidHospital) {
-                        return NextResponse.json(
-                            {
-                                success: false,
-                                error: '자신이 속한 병원만 선택할 수 있습니다.'
-                            },
-                            { status: 403 }
-                        );
-                    }
-                }
-            }
+            hospitals = [access.hospital];
         }
 
         // 1. Get filtered users (try users collection first, fallback to patients for backward compatibility)
@@ -263,9 +212,6 @@ export async function POST(request: NextRequest) {
         // Filter by categories and extract lectures
         const lectures: Array<{ category: string; title: string; isVideo: boolean }> = [];
 
-        console.log('[Report Generation] Selected categories:', categories);
-        console.log('[Report Generation] Normalized categories:', normalizedCategories);
-
         lectureItems.forEach(item => {
             const category = item['카테고리'] || item['카테고리명'] || item['category'] || item['Category'];
             const title = item['강의제목'] || item['제목'] || item['title'] || item['Title'] || '';
@@ -284,7 +230,6 @@ export async function POST(request: NextRequest) {
                             title: title.trim(),
                             isVideo: Boolean(isVideo)
                         });
-                        console.log(`[Report Generation] Added lecture: Category="${category.trim()}", Title="${title.trim()}", IsVideo=${Boolean(isVideo)}`);
                     }
                 }
             }
@@ -303,7 +248,6 @@ export async function POST(request: NextRequest) {
                 title: 'Stent_Eso_GEjunction',
                 isVideo: true
             });
-            console.log('[Report Generation] Added Stent_Eso_GEjunction to Advanced course for F2');
         }
 
         const hasAdvancedF1 = normalizedCategories.some((c: string) =>
@@ -319,7 +263,6 @@ export async function POST(request: NextRequest) {
                 title: nvugibMxBasicsTitle,
                 isVideo: true
             });
-            console.log('[Report Generation] Added NVUGIB Mx basics lecture to Advanced course for F1');
         }
 
         // EGD variation: keep only the first code per letter group (e.g. A1, B1, C1 — exclude A2, A3, B2, etc.)
@@ -338,15 +281,6 @@ export async function POST(request: NextRequest) {
         lectures.length = 0;
         lectures.push(...filteredLectures);
 
-        console.log(`[Report Generation] Total lectures found: ${lectures.length}`);
-        console.log('[Report Generation] Lectures by category:',
-            lectures.reduce((acc, lecture) => {
-                const cat = lecture.category;
-                acc[cat] = (acc[cat] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>)
-        );
-
         if (lectures.length === 0) {
             return NextResponse.json(
                 { error: '선택한 카테고리에 해당하는 강의가 없습니다.' },
@@ -361,6 +295,10 @@ export async function POST(request: NextRequest) {
         const egdLogFileMeta = new Map<string, Date>();
         const regularLogFileText = new Map<string, string>(); // fileName -> log content (Email/Hospital 확인용)
         const egdLogFileText = new Map<string, string>();
+        // Every report match requires the learner's name in the file name.
+        const selectedUserNames = users.map(user => getUserName(user).toLowerCase()).filter(Boolean);
+        const isSelectedUserFile = (fileName: string) =>
+            selectedUserNames.some(name => fileName.toLowerCase().includes(name));
         let bucket;
 
         const HOURS_24_MS = 24 * 60 * 60 * 1000;
@@ -369,42 +307,60 @@ export async function POST(request: NextRequest) {
             const adminStorage = getAdminStorage();
             bucket = adminStorage.bucket();
 
-            const fetchFileMeta = async (files: Array<{ name: string; getMetadata: () => Promise<unknown>; download: () => Promise<unknown> }>) => {
-                const results = await Promise.allSettled(files.map(f => f.getMetadata()));
-                const contentResults = await Promise.allSettled(files.map(f => f.download()));
+            type ReportLogFile = {
+                name: string;
+                metadata?: { timeCreated?: string };
+                getMetadata: () => Promise<unknown>;
+                download: () => Promise<unknown>;
+            };
+            const fetchFileMeta = async (files: ReportLogFile[]) => {
                 const metaMap = new Map<string, Date>();
                 const textMap = new Map<string, string>();
                 const names: string[] = [];
-                files.forEach((file, i) => {
-                    const fileName = file.name.split('/').pop() || file.name;
-                    if (!fileName) return;
-                    names.push(fileName);
-                    const result = results[i];
-                    if (result.status === 'fulfilled') {
-                        const res = result.value as [unknown] | unknown;
-                        const metadata = Array.isArray(res) ? res[0] : (res as { timeCreated?: string });
-                        const timeCreated = (metadata as { timeCreated?: string })?.timeCreated;
-                        if (timeCreated) {
-                            metaMap.set(fileName, new Date(timeCreated));
+                // Avoid issuing thousands of Storage requests at the same time.
+                for (let offset = 0; offset < files.length; offset += 16) {
+                    const batch = files.slice(offset, offset + 16);
+                    const [results, contentResults] = await Promise.all([
+                        Promise.allSettled(batch.map(f =>
+                            f.metadata?.timeCreated ? Promise.resolve(f.metadata) : f.getMetadata()
+                        )),
+                        Promise.allSettled(batch.map(f => f.download())),
+                    ]);
+                    batch.forEach((file, i) => {
+                        const fileName = file.name.split('/').pop() || file.name;
+                        if (!fileName) return;
+                        names.push(fileName);
+                        const result = results[i];
+                        if (result.status === 'fulfilled') {
+                            const res = result.value as [unknown] | unknown;
+                            const metadata = Array.isArray(res) ? res[0] : (res as { timeCreated?: string });
+                            const timeCreated = (metadata as { timeCreated?: string })?.timeCreated;
+                            if (timeCreated) {
+                                metaMap.set(fileName, new Date(timeCreated));
+                            }
                         }
-                    }
-                    const contentResult = contentResults[i];
-                    if (contentResult.status === 'fulfilled') {
-                        const res = contentResult.value as [unknown] | unknown;
-                        const downloaded = Array.isArray(res) ? res[0] : res;
-                        if (Buffer.isBuffer(downloaded)) {
-                            textMap.set(fileName, downloaded.toString('utf-8').replace(/^\uFEFF/, ''));
+                        const contentResult = contentResults[i];
+                        if (contentResult.status === 'fulfilled') {
+                            const res = contentResult.value as [unknown] | unknown;
+                            const downloaded = Array.isArray(res) ? res[0] : res;
+                            if (Buffer.isBuffer(downloaded)) {
+                                textMap.set(fileName, downloaded.toString('utf-8').replace(/^\uFEFF/, ''));
+                            }
                         }
-                    }
-                });
+                    });
+                }
                 return { names, metaMap, textMap };
             };
 
             // Get files from regular log folder
             try {
                 const [regularFiles] = await bucket.getFiles({ prefix: 'log/' });
-                const { names, metaMap, textMap } = await fetchFileMeta(regularFiles as Array<{ name: string; getMetadata: () => Promise<unknown>; download: () => Promise<unknown> }>);
-                regularLogFileNames = names.filter(n => n && n.length > 0);
+                const reportableFiles = regularFiles.filter(file => {
+                    const name = file.name.split('/').pop() || file.name;
+                    return isReportableLearningLog(name) && isSelectedUserFile(name);
+                });
+                const { names, metaMap, textMap } = await fetchFileMeta(reportableFiles as ReportLogFile[]);
+                regularLogFileNames = names;
                 metaMap.forEach((v, k) => regularLogFileMeta.set(k, v));
                 textMap.forEach((v, k) => regularLogFileText.set(k, v));
             } catch (regularError: any) {
@@ -414,8 +370,11 @@ export async function POST(request: NextRequest) {
             // Get files from EGD Lesion Dx log folder
             try {
                 const [egdFiles] = await bucket.getFiles({ prefix: 'log_EGD_Lesion_Dx/' });
-                const { names, metaMap, textMap } = await fetchFileMeta(egdFiles as Array<{ name: string; getMetadata: () => Promise<unknown>; download: () => Promise<unknown> }>);
-                egdLogFileNames = names.filter(n => n && n.length > 0);
+                const selectedFiles = egdFiles.filter(file =>
+                    isSelectedUserFile(file.name.split('/').pop() || file.name)
+                );
+                const { names, metaMap, textMap } = await fetchFileMeta(selectedFiles as ReportLogFile[]);
+                egdLogFileNames = names;
                 metaMap.forEach((v, k) => egdLogFileMeta.set(k, v));
                 textMap.forEach((v, k) => egdLogFileText.set(k, v));
             } catch (egdError: any) {
@@ -563,16 +522,27 @@ export async function POST(request: NextRequest) {
             .filter(u => u.email);
 
         // Hook을 사용하여 누적 시청 시간 계산
-        console.log(`[generate-report] Fetching watch time data for ${userEmails.length} users`);
         const watchTimeMap = await calculateAccumulatedWatchTime(userEmails, adminDb);
-        console.log(`[generate-report] Watch time map size: ${watchTimeMap.size}`);
-        watchTimeMap.forEach((userWatchTimes, email) => {
-            console.log(`[generate-report] User ${email} has ${userWatchTimes.size} watch time entries:`, Array.from(userWatchTimes.keys()));
-        });
 
         // 7. Fill completion data
         const recentlyChangedCells: [number, number][] = [];
         const now = Date.now();
+
+        // Name and verified identity are independent of the lecture row. Check them
+        // once per learner instead of scanning every log for every report cell.
+        const filesByUser = (fileNames: string[], fileText: Map<string, string>) => users.map(user => {
+            const name = getUserName(user).toLowerCase();
+            if (!name) return [];
+            const email = getUserEmail(user);
+            const hospital = getUserHospital(user);
+            return fileNames.filter(fileName =>
+                fileName.toLowerCase().includes(name) &&
+                logIdentityMatchesUser(fileText.get(fileName), email, hospital)
+            );
+        });
+        const regularFilesByUser = filesByUser(regularLogFileNames, regularLogFileText);
+        const egdFilesByUser = filesByUser(egdLogFileNames, egdLogFileText);
+        const dxEgdLectureTitles = TRACKED_F1_WATCH_TIME_LECTURE_TITLES.map(title => title.toLowerCase().trim());
 
         const isWithin24Hours = (d: Date | undefined) =>
             d && (now - d.getTime()) < HOURS_24_MS;
@@ -603,7 +573,6 @@ export async function POST(request: NextRequest) {
 
             // Check if this row is 'Dx EGD 실전 강의' category
             // Watch-time tracked F1 lectures include Dx EGD lectures and selected NVUGIB lectures.
-            const dxEgdLectureTitles = TRACKED_F1_WATCH_TIME_LECTURE_TITLES.map(title => title.toLowerCase().trim());
             const lectureTitleLower = lectureTitle.toLowerCase().trim();
 
             // 카테고리 매칭: 'advanced-f1', 'Advanced course for F1', 'Dx EGD 실전 강의', 'other lecture' 모두 허용
@@ -625,26 +594,6 @@ export async function POST(request: NextRequest) {
 
             const isDxEgdLectureRow = isAdvancedF1Category && isDxEgdLectureTitle;
 
-            // Debug log for Dx EGD 실전 강의 - 모든 Dx EGD 강의에 대해 로그 출력
-            if (dxEgdLectureTitles.some(title => lectureTitleLower.includes(title))) {
-                console.log(`[Dx EGD 실전 강의 체크] Category: "${category}", CategoryLower: "${categoryLower}", CategoryNormalized: "${categoryNormalized}"`);
-                console.log(`[Dx EGD 실전 강의 체크] Lecture: "${lectureTitle}", LectureLower: "${lectureTitleLower}"`);
-                console.log(`[Dx EGD 실전 강의 체크] isAdvancedF1Category: ${isAdvancedF1Category}, isDxEgdLectureTitle: ${isDxEgdLectureTitle}, isDxEgdLectureRow: ${isDxEgdLectureRow}`);
-                console.log(`[Dx EGD 실전 강의 체크] Category checks:`, {
-                    'categoryLower.includes("advanced course for f1")': categoryLower.includes('advanced course for f1'),
-                    'categoryNormalized.includes("advanced course for f1")': categoryNormalized.includes('advanced course for f1'),
-                    'categoryLower === "advanced-f1"': categoryLower === 'advanced-f1',
-                    'categoryNormalized.includes("advanced-f1")': categoryNormalized.includes('advanced-f1')
-                });
-                console.log(`[Dx EGD 실전 강의 체크] dxEgdLectureTitles:`, dxEgdLectureTitles);
-                console.log(`[Dx EGD 실전 강의 체크] Matching check:`, dxEgdLectureTitles.map(title => ({
-                    title,
-                    'lectureTitleLower === title': lectureTitleLower === title,
-                    'lectureTitleLower.includes(title)': lectureTitleLower.includes(title),
-                    'title.includes(lectureTitleLower)': title.includes(lectureTitleLower)
-                })));
-            }
-
             // 강제로 Dx EGD 강의로 인식하도록 임시 수정 (디버깅용)
             // Complication_Sedation 등이 포함된 경우 무조건 Dx EGD 강의로 처리
             const forceDxEgdRow = dxEgdLectureTitles.some(title => {
@@ -652,27 +601,10 @@ export async function POST(request: NextRequest) {
                 return watchTimeTitlesMatch(lectureTitleLower, titleLower);
             }) && (categoryLower.includes('advanced') || categoryLower.includes('f1'));
 
-            if (forceDxEgdRow && !isDxEgdLectureRow) {
-                console.log(`[Dx EGD 실전 강의] ⚠️ Force enabling Dx EGD row detection!`);
-                console.log(`[Dx EGD 실전 강의] Original isDxEgdLectureRow: ${isDxEgdLectureRow}, Forced: true`);
-            }
-
             const finalIsDxEgdLectureRow = isDxEgdLectureRow || forceDxEgdRow;
 
-            if (finalIsDxEgdLectureRow) {
-                console.log(`[Dx EGD 실전 강의] ✓ Row detected! Category: "${category}", Lecture: "${lectureTitle}"`);
-            } else if (dxEgdLectureTitles.some(title => lectureTitleLower.includes(title))) {
-                console.log(`[Dx EGD 실전 강의] ✗ Row NOT detected! Category: "${category}", Lecture: "${lectureTitle}"`);
-                console.log(`[Dx EGD 실전 강의] ✗ Reason: isAdvancedF1Category=${isAdvancedF1Category}, isDxEgdLectureTitle=${isDxEgdLectureTitle}`);
-            }
-
-            // Debug log (can be removed later)
-            if (categoryNormalized.includes('egd lesion dx')) {
-                console.log(`Category: "${category}" -> Normalized: "${categoryNormalized}" -> isEGDLesionDxRow: ${isEGDLesionDxRow}`);
-            }
-
             // Select appropriate log file list and meta based on category
-            const logFileNames = isEGDLesionDxRow ? egdLogFileNames : regularLogFileNames;
+            const logFilesByUser = isEGDLesionDxRow ? egdFilesByUser : regularFilesByUser;
             const logFileMeta = isEGDLesionDxRow ? egdLogFileMeta : regularLogFileMeta;
             const logFileText = isEGDLesionDxRow ? egdLogFileText : regularLogFileText;
 
@@ -684,11 +616,11 @@ export async function POST(request: NextRequest) {
                 const user = users[userIndex];
                 const userName = getUserName(user);
                 if (!userName) continue;
+                const logFileNames = logFilesByUser[userIndex];
 
                 // Get user identity from users array (for CPX/log matching)
                 const userPosition = user ? String(user['직위'] || user['position'] || '').trim() : '';
                 const userEmail = getUserEmail(user);
-                const userHospital = getUserHospital(user);
 
                 // 강의제목이 코드 형식인지 확인 (예: A1, B1, B2, C1, C2, D2, F2 등)
                 const isCodeFormat = /^[A-Z]\d+$/i.test(lectureTitle.trim());
@@ -718,9 +650,6 @@ export async function POST(request: NextRequest) {
                         const fileNameLower = fileName.toLowerCase();
                         const lectureLower = lectureTitle.toLowerCase();
                         const userLower = userName.toLowerCase();
-                        if (!logIdentityMatchesUser(logFileText.get(fileName), userEmail, userHospital)) {
-                            return false;
-                        }
 
                         return fileNameLower.includes(lectureLower) && fileNameLower.includes(userLower);
                     });
@@ -735,9 +664,6 @@ export async function POST(request: NextRequest) {
                     const matchingFilesForYes = logFileNames.filter(fileName => {
                         const fileNameLower = fileName.toLowerCase();
                         const userLower = userName.toLowerCase();
-                        if (!logIdentityMatchesUser(logFileText.get(fileName), userEmail, userHospital)) {
-                            return false;
-                        }
 
                         // CPX 카테고리인 경우: CPX 케이스 번호로 매칭
                         if (isCPXRow) {
@@ -749,31 +675,16 @@ export async function POST(request: NextRequest) {
                                 // 파일명 형식: "F1서시온CPX_01" (구분자 없음) 또는 "F1-서시온-CPX_01" (하이픈) 또는 "F1 서시온 CPX_01" (공백)
                                 // CPX 케이스 번호를 제거한 후, 직위와 이름이 모두 포함되어 있는지 확인
 
-                                // 파일명에서 CPX 케이스 번호 부분 제거 (예: "CPX_01" 또는 "cpx_01")
-                                const fileNameWithoutCPX = fileNameLower.replace(/cpx[_-]\d+/i, '').trim();
-
                                 // 사용자 이름과 직위가 파일명에 포함되어 있는지 확인
                                 const userPositionLower = userPosition.toLowerCase();
                                 const userInFileName = fileNameLower.includes(userLower);
                                 const positionInFileName = userPositionLower && fileNameLower.includes(userPositionLower);
-
-                                // CPX 케이스 번호를 제거한 부분에서도 확인 (더 정확한 매칭)
-                                const userInFileNameWithoutCPX = fileNameWithoutCPX.includes(userLower);
-                                const positionInFileNameWithoutCPX = userPositionLower && fileNameWithoutCPX.includes(userPositionLower);
 
                                 // 매칭 조건:
                                 // 1. CPX 케이스 번호가 일치하고
                                 // 2. 사용자 이름이 파일명에 포함되어 있고
                                 // 3. (직위가 있으면) 직위도 파일명에 포함되어 있어야 함
                                 const isMatch = userInFileName && (userPositionLower ? positionInFileName : true);
-
-                                // 디버깅 로그
-                                if (cpxCaseFromFile === cpxCaseFromLecture) {
-                                    console.log(`[CPX Match] File: "${fileName}", User: "${userName}", Position: "${userPosition}", Lecture: "${lectureTitle}"`);
-                                    console.log(`[CPX Match] CPX Case: ${cpxCaseFromFile} === ${cpxCaseFromLecture}`);
-                                    console.log(`[CPX Match] User in file: ${userInFileName}, Position in file: ${positionInFileName}`);
-                                    console.log(`[CPX Match] Result: ${isMatch}`);
-                                }
 
                                 return isMatch;
                             }
@@ -818,11 +729,6 @@ export async function POST(request: NextRequest) {
 
                     // 'Dx EGD 실전 강의' 카테고리인 경우: 시청 시간 데이터 확인 후 누적 % 표시
                     // 강제 인식된 경우도 포함
-                    const finalIsDxEgdLectureRow = isDxEgdLectureRow || (dxEgdLectureTitles.some(title => {
-                        const titleLower = title.toLowerCase();
-                        return watchTimeTitlesMatch(lectureTitleLower, titleLower);
-                    }) && (categoryLower.includes('advanced') || categoryLower.includes('f1')));
-
                     const watchTimeMatch = userEmail && watchTimeMap.has(userEmail)
                         ? findWatchTimeReportMatch(watchTimeMap.get(userEmail)!, lectureTitle, category)
                         : null;
@@ -830,12 +736,8 @@ export async function POST(request: NextRequest) {
                     const shouldUseWatchTimeRoutine = finalIsDxEgdLectureRow || isHemostasisCaseRow || !!watchTimeMatch;
 
                     if (shouldUseWatchTimeRoutine) {
-                        console.log(`[동영상 시청 루틴 매칭] User: ${userName}, Email: ${userEmail}, Lecture: "${lectureTitle}", Category: "${category}"`);
-                        console.log(`[동영상 시청 루틴 매칭] watchTimeMap.has(${userEmail}): ${watchTimeMap.has(userEmail)}`);
-
                         if (watchTimeMatch && watchTimeMatch.watchTime.duration > 0) {
                             const totalPercentage = watchTimeMatch.watchTime.totalPercentage || 0;
-                            console.log(`[동영상 시청 루틴 매칭] Final match: Key="${watchTimeMatch.key}", Score=${watchTimeMatch.score}, Percentage=${totalPercentage}%`);
                             // Preserve credit from legacy case logs created under the old play-to-complete rule.
                             newData[row][col] = isHemostasisCaseRow && hasCompletion && totalPercentage < 80
                                 ? 'yes'
@@ -847,14 +749,12 @@ export async function POST(request: NextRequest) {
                             // 시청 시간 데이터가 없으면 로그 파일 확인
                             if (hasCompletion) {
                                 // 로그 파일이 있으면 "yes" 표시
-                                console.log(`[동영상 시청 루틴 매칭] No watch time data but log file exists, showing "yes"`);
                                 newData[row][col] = 'yes';
                                 if (matchingFilesForYes.some(fn => isWithin24Hours(logFileMeta.get(fn)))) {
                                     recentlyChangedCells.push([row, col]);
                                 }
                             } else {
                                 // 로그 파일도 없으면 "no" 표시
-                                console.log(`[동영상 시청 루틴 매칭] No watch time data and no log file, showing "no"`);
                                 newData[row][col] = 'no';
                             }
                         }

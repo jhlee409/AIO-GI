@@ -5,8 +5,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
+import { requireAdmin } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { id, storagePath } = await request.json();
 

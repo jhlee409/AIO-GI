@@ -4,6 +4,7 @@
  */
 'use client';
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
@@ -47,7 +48,7 @@ export default function InstructorLoginHistoryPage() {
         try {
             setLoading(true);
             setError(null);
-            const response = await fetch('/api/admin/instructor-login-history');
+            const response = await authenticatedFetch('/api/admin/instructor-login-history');
             
             if (!response.ok) {
                 throw new Error('로그인 이력을 불러오는데 실패했습니다.');

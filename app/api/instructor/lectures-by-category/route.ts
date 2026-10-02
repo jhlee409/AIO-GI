@@ -3,9 +3,12 @@
  * Gets lecture titles from lecture_list collection filtered by categories
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInstructor } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
+    const access = await requireInstructor(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { categories } = await request.json();
 

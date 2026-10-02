@@ -3,11 +3,14 @@
  * Delete multiple lecture list items at once
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 
 const LECTURE_LIST_COLLECTION = 'lecture_list';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { itemIds } = await request.json();
 

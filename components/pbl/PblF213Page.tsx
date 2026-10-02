@@ -4,7 +4,8 @@
  */
 'use client';
 
-import { trackedLearningFetch } from '@/lib/learning-session';
+import { requestLearningExit, trackedLearningFetch } from '@/lib/learning-session';
+import { usePblCompletion } from '@/components/pbl/usePblCompletion';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FileText, AlertCircle, Home, LogOut, ArrowLeft } from 'lucide-react';
@@ -340,17 +341,18 @@ export function PblF213Page({ onClose }: PblF213PageProps) {
     const [completedSteps, setCompletedSteps] = useState<number[]>([]);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [userProfile, setUserProfile] = useState<{ position: string; name: string } | null>(null);
-    const logCreatedRef = useRef(false);
+    const logCreatedRef = useRef(-1);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const totalSteps = Object.keys(conversationSteps).length;
+    const retryCompletionLog = usePblCompletion(user?.email, 'PBL_F2_13', currentStep, totalSteps);
 
     // 시청 시간 저장 함수
     const saveWatchTimeBeforeNavigation = async () => {
         if (user?.email) {
             try {
-                await fetch('/api/video/watch-time/save-on-logout', {
+                await trackedLearningFetch('/api/video/watch-time/save-on-logout', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -367,18 +369,22 @@ export function PblF213Page({ onClose }: PblF213PageProps) {
     };
 
     // 초기 화면으로 (PBL 목록으로)
-    const handleInitialScreen = () => {
+    const handleInitialScreen = async () => {
+        if (!(await requestLearningExit())) return;
         onClose();
     };
 
     // 이전 화면으로 (courses 페이지로)
     const handlePreviousScreen = async () => {
+        if (!(await requestLearningExit())) return;
         await saveWatchTimeBeforeNavigation();
+        onClose();
         router.push('/courses/advanced-f2');
     };
 
     // 홈으로
     const handleHome = async () => {
+        if (!(await requestLearningExit())) return;
         await saveWatchTimeBeforeNavigation();
         router.push('/');
     };
@@ -417,10 +423,11 @@ export function PblF213Page({ onClose }: PblF213PageProps) {
     }, [user]);
 
     useEffect(() => {
-        if (user?.email && userProfile && !logCreatedRef.current) {
+        if (user?.email && userProfile && currentStep >= totalSteps && logCreatedRef.current !== retryCompletionLog) {
+            logCreatedRef.current = retryCompletionLog;
             const createLogFile = async () => {
                 try {
-                    const fileName = `${userProfile.position}-${userProfile.name}-PBL_F2_13`;
+                    const fileName = `${userProfile.position}-${userProfile.name}-PBL_F2_13-Completed`;
 
                     const logContent = `Position: ${userProfile.position}
 Name: ${userProfile.name}
@@ -428,7 +435,7 @@ Email: ${user.email}
 Category: Advanced course for F2
 Section: Problem-Based Learning (PBL) for F2
 Case: PBL_F2_13 - esophageal SCC sm에서 LN meta 여부의 중요성
-Action: PBL Started
+Action: PBL Completed
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
 
@@ -443,9 +450,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                         }),
                     });
 
-                    if (response.ok) {
-                        logCreatedRef.current = true;
-                    }
+                    if (!response.ok) console.error('PBL completion log was not saved');
                 } catch (error) {
                     console.error('Error creating log file:', error);
                 }
@@ -453,7 +458,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
             createLogFile();
         }
-    }, [user?.email, userProfile]);
+    }, [user?.email, userProfile, currentStep, totalSteps, retryCompletionLog]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -563,7 +568,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                     </button>
                 </div>
                 <button
-                    onClick={onClose}
+                    onClick={handleInitialScreen}
                     className="absolute top-4 right-4 z-50 bg-white hover:bg-gray-100 rounded-full p-2 shadow-lg border-2 border-gray-300 transition-colors"
                     aria-label="닫기"
                 >

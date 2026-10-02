@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/AuthProvider';
+import { fetchSharedUserInfo } from '@/lib/client-user-info';
 
 export interface UserInfo {
     position: string;
@@ -38,7 +39,11 @@ export function useUserProfile(): UseUserProfileReturn {
             setLoading(true);
             setError(null);
 
-            const response = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
+            const encodedEmail = encodeURIComponent(user.email);
+            const [response, instructorResponse] = await Promise.all([
+                fetchSharedUserInfo(`/api/user/profile?email=${encodedEmail}`),
+                fetchSharedUserInfo(`/api/user/instructor-status?email=${encodedEmail}`),
+            ]);
             if (!response.ok) {
                 throw new Error('프로필 정보를 불러오는데 실패했습니다.');
             }
@@ -51,7 +56,6 @@ export function useUserProfile(): UseUserProfileReturn {
             const profileData = await response.json();
             
             // 강사 상태 확인
-            const instructorResponse = await fetch(`/api/user/instructor-status?email=${encodeURIComponent(user.email)}`);
             let instructorData = { isInstructor: false };
             
             if (instructorResponse.ok) {
@@ -81,7 +85,7 @@ export function useUserProfile(): UseUserProfileReturn {
         if (!authLoading) {
             loadUserInfo();
         }
-    }, [user, role, authLoading]);
+    }, [user?.email, role, authLoading]);
 
     return {
         userInfo,

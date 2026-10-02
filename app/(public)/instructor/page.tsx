@@ -4,6 +4,7 @@
  */
 'use client';
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useAuth } from '@/components/AuthProvider';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -41,7 +42,7 @@ export default function InstructorPage() {
             }
 
             try {
-                const response = await fetch(`/api/user/instructor-status?email=${encodeURIComponent(user.email)}`);
+                const response = await authenticatedFetch(`/api/user/instructor-status?email=${encodeURIComponent(user.email)}`);
                 if (!response.ok) {
                     throw new Error('Failed to check instructor status');
                 }
@@ -82,7 +83,7 @@ export default function InstructorPage() {
             }
 
             try {
-                const response = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
+                const response = await authenticatedFetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
                 if (response.ok) {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -107,7 +108,7 @@ export default function InstructorPage() {
     useEffect(() => {
         const loadFilterOptions = async () => {
             try {
-                const response = await fetch('/api/instructor/filter-options');
+                const response = await authenticatedFetch('/api/instructor/filter-options');
                 if (response.ok) {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -146,7 +147,7 @@ export default function InstructorPage() {
     useEffect(() => {
         const loadCategories = async () => {
             try {
-                const response = await fetch('/api/instructor/categories');
+                const response = await authenticatedFetch('/api/instructor/categories');
                 if (response.ok) {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -480,7 +481,7 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
         setReportMessage(null);
 
         try {
-            const response = await fetch('/api/instructor/generate-report', {
+            const response = await authenticatedFetch('/api/instructor/generate-report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -490,7 +491,6 @@ button{padding:8px 20px;color:#fff;border:none;border-radius:8px;font-size:14px;
                     positions: Array.from(selectedPositions),
                     name: nameInput.trim(),
                     categories: Array.from(selectedCourses),
-                    userEmail: user?.email || '', // 서버 측 검증을 위해 이메일 전달
                 }),
             });
 

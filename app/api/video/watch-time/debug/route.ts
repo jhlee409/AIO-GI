@@ -4,8 +4,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { requireAdmin } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const searchParams = request.nextUrl.searchParams;
         const email = searchParams.get('email');

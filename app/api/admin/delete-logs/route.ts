@@ -6,16 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminStorage, getAdminDb } from '@/lib/firebase-admin';
-
-interface FileInfo {
-    path: string;
-    name: string;
-    size: number;
-    contentType?: string;
-    userEmail?: string;
-    userName?: string;
-    userPosition?: string;
-}
+import { requireAdmin } from '@/lib/api-auth';
 
 interface DeletionRecord {
     삭제일시: string;
@@ -28,6 +19,8 @@ interface DeletionRecord {
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { action, users, extraPositions } = await request.json();
 

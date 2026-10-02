@@ -5,11 +5,14 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { requireAdmin } from '@/lib/api-auth';
 
 const USERS_COLLECTION = 'users';
 
 // GET: Fetch all users
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminDb = getAdminDb();
         let snapshot = await adminDb.collection(USERS_COLLECTION).get();
@@ -36,6 +39,8 @@ export async function GET() {
 
 // POST: Save users (from Excel upload)
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { users } = await request.json();
 
@@ -93,8 +98,10 @@ export async function POST(request: NextRequest) {
 
 // DELETE: Delete a user
 export async function DELETE(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
-        const { userId, requesterEmail } = await request.json();
+        const { userId } = await request.json();
 
         if (!userId) {
             return NextResponse.json(
@@ -110,7 +117,7 @@ export async function DELETE(request: NextRequest) {
         if (userDoc.exists) {
             const userData = userDoc.data();
             const userEmail = String(userData?.['이메일'] || userData?.['email'] || userData?.['Email'] || '').toLowerCase().trim();
-            if (userEmail === 'jhlee409@gmail.com' && requesterEmail?.toLowerCase() !== 'jhlee409@gmail.com') {
+            if (userEmail === 'jhlee409@gmail.com' && access.email !== 'jhlee409@gmail.com') {
                 return NextResponse.json(
                     { error: 'jhlee409@gmail.com 레코드는 해당 계정으로 로그인한 경우에만 삭제할 수 있습니다.' },
                     { status: 403 }

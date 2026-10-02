@@ -92,7 +92,6 @@ export interface VideoPlayerStateSetters {
     setShowPeg: (show: boolean) => void;
     setPegVideoUrl: (url: string | null) => void;
     setPegError: (error: string | null) => void;
-    setPegLogCreated: (created: boolean) => void;
     
     // NVUGIB Overview
     setShowNvugibOverview: (show: boolean) => void;
@@ -203,7 +202,6 @@ export function resetAllVideoPlayers(setters: VideoPlayerStateSetters) {
     setters.setShowPeg(false);
     setters.setPegVideoUrl(null);
     setters.setPegError(null);
-    setters.setPegLogCreated(false);
     
     // NVUGIB Overview
     setters.setShowNvugibOverview(false);

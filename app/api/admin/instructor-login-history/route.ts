@@ -3,6 +3,7 @@
  * Returns login history for all instructors for the past month
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { isPrimaryAdminEmail } from '@/lib/auth-server';
 
@@ -21,6 +22,8 @@ interface LoginHistory {
 }
 
 export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminDb = getAdminDb();
         

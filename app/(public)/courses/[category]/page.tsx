@@ -4,13 +4,11 @@
  */
 'use client';
 
-import { recordLearningLogAttempt, trackedLearningFetch } from '@/lib/learning-session';
+import { clearActiveLearningAttempt, getActiveLearningAttempt, getLearningAttempts, getVerifiedLearningExitIssue, recordLearningLogAttempt, setActiveLearningAttempt, startLearningLogAttempt, trackedLearningFetch, waitForLearningRequests, type LearningAttempt } from '@/lib/learning-session';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { BookOpen, Download, Upload, Video, FileText, Music, X, Trash2 } from 'lucide-react';
-import CustomVideoPlayer from '@/components/viewers/CustomVideoPlayer';
+import { Download, Upload, Video, FileText, Music, X, Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { convertBmpToJpg, isBmpFile } from '@/lib/image-converter';
 import { useVideoUpload } from '@/lib/hooks/useVideoUpload';
@@ -18,12 +16,13 @@ import { InstructorInfo } from '@/lib/instructor-utils';
 import { isAdmin } from '@/lib/auth';
 import { HEMOSTASIS_CASE_VIDEO_TITLES, type VideoCompletionMode } from '@/lib/report-watch-time';
 import dynamic from 'next/dynamic';
-import { courseConfig, CourseItem, CourseSection } from './config/courseConfig';
+import { courseConfig } from './config/courseConfig';
 import { removeEmptyLines, removeEmptyLinesAndUnderscores } from './utils/textUtils';
 import ImageWindow from './components/ImageWindow';
 import FullScreenVideoPlayer, { FullScreenVideoPlayerRef } from './components/FullScreenVideoPlayer';
 import ActionButton from './components/ActionButton';
 import ClickableCard from './components/ClickableCard';
+import { LearningExitDialog } from '@/components/LearningExitDialog';
 
 const PblF201Page = dynamic(() => import('@/components/pbl/PblF201Page').then(mod => ({ default: mod.PblF201Page })), { ssr: false });
 const PblF202Page = dynamic(() => import('@/components/pbl/PblF202Page').then(mod => ({ default: mod.PblF202Page })), { ssr: false });
@@ -64,6 +63,32 @@ export default function CoursePage() {
     }, [category, router]);
 
     const [selectedItem, setSelectedItem] = useState<string | null>(null);
+    const [pendingLearningExit, setPendingLearningExit] = useState<{
+        label: string;
+        kind: LearningAttempt['kind'];
+        reason: 'incomplete' | 'failed';
+        decide: (leave: boolean) => void;
+    } | null>(null);
+    const confirmActiveLearningExit = React.useCallback(async (): Promise<boolean> => {
+        const active = getActiveLearningAttempt();
+        if (!active || active.email.toLowerCase() !== user?.email?.toLowerCase()) return true;
+        window.dispatchEvent(new CustomEvent('pauseLearningVideo', { detail: { key: active.key } }));
+        await waitForLearningRequests();
+        const attempt = getLearningAttempts(active.email).find(item => item.kind === active.kind && item.key === active.key);
+        const reason = user ? await getVerifiedLearningExitIssue(attempt, () => user.getIdToken()) : 'failed';
+        if (!reason) {
+            clearActiveLearningAttempt(active.key);
+            return true;
+        }
+        const leave = await new Promise<boolean>(resolve => {
+            setPendingLearningExit({ label: active.label, kind: active.kind, reason, decide: resolve });
+        });
+        if (leave) clearActiveLearningAttempt(active.key);
+        else if (active.kind === 'video') {
+            window.dispatchEvent(new CustomEvent('allowAnotherVideoSave', { detail: { key: active.key } }));
+        }
+        return leave;
+    }, [user?.email]);
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const [loadingVideo, setLoadingVideo] = useState(false);
     const [videoError, setVideoError] = useState<string | null>(null);
@@ -125,6 +150,20 @@ export default function CoursePage() {
     const [showEmtVisualization, setShowEmtVisualization] = useState(false);
     const [emtVisualizationIndex, setEmtVisualizationIndex] = useState(0);
     const [emtVersion, setEmtVersion] = useState<'EMT' | 'EMT-L'>('EMT'); // EMT 버전 선택
+
+    useEffect(() => {
+        const uploadType = selectedItem === 'memory-training' ? 'MT'
+            : selectedItem === 'scope-handling' ? 'SHT'
+            : selectedItem === 'lht' ? 'LHT'
+            : selectedItem === 'egd-method' ? emtVersion
+            : null;
+        if (!uploadType || !user?.email || !userProfile) return;
+        const key = `log/${userProfile.position}-${userProfile.name}-${uploadType}`;
+        const label = `${uploadType} 학습`;
+        recordLearningLogAttempt({ email: user.email, key, label, completedLocally: false });
+        setActiveLearningAttempt({ kind: 'log', email: user.email, key, label });
+        return () => clearActiveLearningAttempt(key);
+    }, [selectedItem, emtVersion, user?.email, userProfile]);
 
     // EMT 시각화 이미지 자동 재생 (1초에 3프레임)
     useEffect(() => {
@@ -205,17 +244,14 @@ export default function CoursePage() {
     const [loadingPeg, setLoadingPeg] = useState(false);
     const [pegError, setPegError] = useState<string | null>(null);
     const [showPeg, setShowPeg] = useState(false);
-    const [pegLogCreated, setPegLogCreated] = useState(false);
 
     // NVUGIB overview video states
     const [nvugibOverviewVideoUrl, setNvugibOverviewVideoUrl] = useState<string | null>(null);
     const [loadingNvugibOverview, setLoadingNvugibOverview] = useState(false);
     const [nvugibOverviewError, setNvugibOverviewError] = useState<string | null>(null);
     const [showNvugibOverview, setShowNvugibOverview] = useState(false);
-    const [nvugibOverviewLogCreated, setNvugibOverviewLogCreated] = useState(false);
     const [selectedNvugibOverviewLecture, setSelectedNvugibOverviewLecture] = useState<{
         title: string;
-        logSlug: string;
     } | null>(null);
 
     // NVUGIB case video states
@@ -231,7 +267,6 @@ export default function CoursePage() {
     const [diagnosticEusError, setDiagnosticEusError] = useState<string | null>(null);
     const [showDiagnosticEus, setShowDiagnosticEus] = useState(false);
     const [selectedDiagnosticEus, setSelectedDiagnosticEus] = useState<string | null>(null);
-    const [diagnosticEusLogCreated, setDiagnosticEusLogCreated] = useState<Set<string>>(new Set());
 
     // Stent Eso GE junction video states
     const [stentEsoGeJunctionVideoUrl, setStentEsoGeJunctionVideoUrl] = useState<string | null>(null);
@@ -256,6 +291,8 @@ export default function CoursePage() {
     const [egdDxInstruction1Error, setEgdDxInstruction1Error] = useState<string | null>(null);
     const [egdDxInstruction2Error, setEgdDxInstruction2Error] = useState<string | null>(null);
     const [showEgdDxInstruction2, setShowEgdDxInstruction2] = useState(false);
+    const [submittingEgdDx, setSubmittingEgdDx] = useState(false);
+    const [egdDxSubmissionError, setEgdDxSubmissionError] = useState<string | null>(null);
     const [showEgdDxImageWindow, setShowEgdDxImageWindow] = useState(false);
     const [showEgdDxImageWindowF2, setShowEgdDxImageWindowF2] = useState(false);
 
@@ -275,6 +312,8 @@ export default function CoursePage() {
     const [egdDxInstruction1ErrorF2, setEgdDxInstruction1ErrorF2] = useState<string | null>(null);
     const [egdDxInstruction2ErrorF2, setEgdDxInstruction2ErrorF2] = useState<string | null>(null);
     const [showEgdDxInstruction2F2, setShowEgdDxInstruction2F2] = useState(false);
+    const [submittingEgdDxF2, setSubmittingEgdDxF2] = useState(false);
+    const [egdDxSubmissionErrorF2, setEgdDxSubmissionErrorF2] = useState<string | null>(null);
 
     // Dx EGD 실전 강의 목록
     const dxEgdLectures = [
@@ -436,6 +475,25 @@ export default function CoursePage() {
         showInjection, showApc, showNexpowder, showEvl, showPeg,
         showNvugibOverview, showNvugibCase, showDiagnosticEus, showStentEsoGeJunction
     ]);
+
+    useEffect(() => {
+        const reviewExit = (event: Event) => {
+            const detail = (event as CustomEvent<{ handled: boolean; resolve: (leave: boolean) => void }>).detail;
+            if (!detail) return;
+            detail.handled = true;
+            void (async () => {
+                try {
+                    await saveCurrentVideoWatchTime();
+                    detail.resolve(await confirmActiveLearningExit());
+                } catch (error) {
+                    console.error('Could not review active learning item', error);
+                    detail.resolve(false);
+                }
+            })();
+        };
+        window.addEventListener('requestLearningExit', reviewExit);
+        return () => window.removeEventListener('requestLearningExit', reviewExit);
+    }, [saveCurrentVideoWatchTime, confirmActiveLearningExit]);
 
     // PBL F2 03 states
     const [showPblF203, setShowPblF203] = useState(false);
@@ -1643,10 +1701,8 @@ export default function CoursePage() {
         setEvlLogCreated(false);
         setShowPeg(false);
         setPegVideoUrl(null);
-        setPegLogCreated(false);
         setShowNvugibOverview(false);
         setNvugibOverviewVideoUrl(null);
-        setNvugibOverviewLogCreated(false);
         setSelectedNvugibOverviewLecture(null);
         setShowNvugibCase(false);
         setNvugibCaseVideoUrl(null);
@@ -1969,6 +2025,7 @@ export default function CoursePage() {
                                                         onClick={async () => {
                                                             // 현재 재생 중인 비디오의 시청 시간 저장
                                                             await saveCurrentVideoWatchTime();
+                                                            if (!(await confirmActiveLearningExit())) return;
                                                             // Hide all video players when selecting a new item
                                                             setShowVideo(false);
                                                             setVideoUrl(null);
@@ -2011,10 +2068,8 @@ export default function CoursePage() {
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -2046,6 +2101,7 @@ export default function CoursePage() {
                                                         onClick={async () => {
                                                             // 현재 재생 중인 비디오의 시청 시간 저장
                                                             await saveCurrentVideoWatchTime();
+                                                            if (!(await confirmActiveLearningExit())) return;
                                                             // Hide all video players when selecting a new item
                                                             setShowVideo(false);
                                                             setVideoUrl(null);
@@ -2091,6 +2147,7 @@ export default function CoursePage() {
                                                     onClick={async () => {
                                                         // 현재 재생 중인 비디오의 시청 시간 저장
                                                         await saveCurrentVideoWatchTime();
+                                                        if (!(await confirmActiveLearningExit())) return;
                                                         // Hide all video players when selecting a new item
                                                         setShowVideo(false);
                                                         setVideoUrl(null);
@@ -2140,6 +2197,7 @@ export default function CoursePage() {
                                         onClick={async () => {
                                             // 현재 재생 중인 비디오의 시청 시간 저장
                                             await saveCurrentVideoWatchTime();
+                                            if (!(await confirmActiveLearningExit())) return;
                                             setSelectedItem(null);
                                             setShowVideo(false);
                                             setVideoUrl(null);
@@ -2180,10 +2238,8 @@ export default function CoursePage() {
                                             setEvlLogCreated(false);
                                             setShowPeg(false);
                                             setPegVideoUrl(null);
-                                            setPegLogCreated(false);
                                             setShowNvugibOverview(false);
                                             setNvugibOverviewVideoUrl(null);
-                                            setNvugibOverviewLogCreated(false);
                                             setShowNvugibCase(false);
                                             setNvugibCaseVideoUrl(null);
                                             setSelectedNvugibCase(null);
@@ -2230,6 +2286,7 @@ export default function CoursePage() {
                                                     setVideoUrl(null);
                                                 }}
                                                 {...getVideoPlayerProps(selectedContent?.title || 'SIM Orientation', 'basic')}
+                                                completionMode="percentage"
                                                 onThresholdReached={() => {
                                                     setLogCreated(true);
                                                 }}
@@ -3753,10 +3810,8 @@ export default function CoursePage() {
                                                     setEvlLogCreated(false);
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
-                                                    setPegLogCreated(false);
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -3829,10 +3884,8 @@ export default function CoursePage() {
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -3913,10 +3966,8 @@ export default function CoursePage() {
                                                     setEvlLogCreated(false);
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
-                                                    setPegLogCreated(false);
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -3989,10 +4040,8 @@ export default function CoursePage() {
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4070,10 +4119,8 @@ export default function CoursePage() {
                                                     setEvlLogCreated(false);
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
-                                                    setPegLogCreated(false);
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -4146,10 +4193,8 @@ export default function CoursePage() {
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4224,10 +4269,8 @@ export default function CoursePage() {
                                                     setEvlLogCreated(false);
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
-                                                    setPegLogCreated(false);
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -4300,10 +4343,8 @@ export default function CoursePage() {
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4375,10 +4416,8 @@ export default function CoursePage() {
                                                     setEvlLogCreated(false);
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
-                                                    setPegLogCreated(false);
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -4451,10 +4490,8 @@ export default function CoursePage() {
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4514,54 +4551,17 @@ export default function CoursePage() {
                                                 ref={pegPlayerRef}
                                                 isOpen={showPeg}
                                                 videoUrl={pegVideoUrl}
-                                                onPlay={async () => {
-                                                    // Create log file when video starts playing
-                                                    if (userProfile && !pegLogCreated) {
-                                                        try {
-                                                            const logFileName = `${userProfile.position}-${userProfile.name}-PEG`;
-                                                            const logContent = `Position: ${userProfile.position}
-Name: ${userProfile.name}
-Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
-Category: Advanced course for F1
-Section: 치료 내시경 기초
-Item: PEG
-Action: Video Play
-Timestamp: ${new Date().toISOString()}
-Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                            const response = await trackedLearningFetch('/api/log/create', {
-                                                                method: 'POST',
-                                                                headers: {
-                                                                    'Content-Type': 'application/json',
-                                                                },
-                                                                body: JSON.stringify({
-                                                                    fileName: logFileName,
-                                                                    content: logContent,
-                                                                }),
-                                                            });
-
-                                                            if (response.ok) {
-                                                                setPegLogCreated(true);
-                                                            }
-                                                        } catch (error) {
-                                                            console.error('Error creating log file:', error);
-                                                        }
-                                                    }
-                                                }}
+                                                {...getVideoPlayerProps('PEG', 'Advanced course for F1', 'percentage')}
                                                 onClose={() => {
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
                                                     setPegError(null);
-                                                    setPegLogCreated(false);
                                                 }}
                                                 onEnded={() => {
                                                     setShowPeg(false);
                                                     setPegVideoUrl(null);
-                                                    setPegLogCreated(false);
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
                                                     setSelectedNvugibCase(null);
@@ -4630,10 +4630,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4693,55 +4691,16 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 ref={nvugibOverviewPlayerRef}
                                                 isOpen={showNvugibOverview}
                                                 videoUrl={nvugibOverviewVideoUrl}
-                                                {...getVideoPlayerProps(selectedNvugibOverviewLecture?.title || 'NVUGIB 총론 강의', 'Advanced course for F1')}
-                                                onPlay={async () => {
-                                                    // Create log file when video starts playing
-                                                    if (userProfile && !nvugibOverviewLogCreated) {
-                                                        try {
-                                                            const lectureTitle = selectedNvugibOverviewLecture?.title || 'NVUGIB 총론 강의';
-                                                            const logSlug = selectedNvugibOverviewLecture?.logSlug || 'NVUGIB_overview';
-                                                            const logFileName = `${userProfile.position}-${userProfile.name}-${logSlug}`;
-                                                            const logContent = `Position: ${userProfile.position}
-Name: ${userProfile.name}
-Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
-Category: Advanced course for F1
-Section: 치료 내시경 임상
-Item: ${lectureTitle}
-Action: Video Play
-Timestamp: ${new Date().toISOString()}
-Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                            const response = await trackedLearningFetch('/api/log/create', {
-                                                                method: 'POST',
-                                                                headers: {
-                                                                    'Content-Type': 'application/json',
-                                                                },
-                                                                body: JSON.stringify({
-                                                                    fileName: logFileName,
-                                                                    content: logContent,
-                                                                }),
-                                                            });
-
-                                                            if (response.ok) {
-                                                                setNvugibOverviewLogCreated(true);
-                                                            }
-                                                        } catch (error) {
-                                                            console.error('Error creating log file:', error);
-                                                        }
-                                                    }
-                                                }}
+                                                {...getVideoPlayerProps(selectedNvugibOverviewLecture?.title || 'NVUGIB 총론 강의', 'Advanced course for F1', 'percentage')}
                                                 onClose={() => {
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
                                                     setNvugibOverviewError(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setSelectedNvugibOverviewLecture(null);
                                                 }}
                                                 onEnded={() => {
                                                     setShowNvugibOverview(false);
                                                     setNvugibOverviewVideoUrl(null);
-                                                    setNvugibOverviewLogCreated(false);
                                                     setSelectedNvugibOverviewLecture(null);
                                                     setShowNvugibCase(false);
                                                     setNvugibCaseVideoUrl(null);
@@ -4811,10 +4770,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4826,7 +4783,6 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                             setNvugibOverviewError(null);
                                                             setSelectedNvugibOverviewLecture({
                                                                 title: '내과전공의를 위한 NVUGIB Mx의 기초',
-                                                                logSlug: 'NVUGIB_Mx_basics_for_residents',
                                                             });
                                                             try {
                                                                 const storagePath = 'EGD_Hemostasis_training/lecture/Fundamentals_of_NVUGIB_Management.mp4';
@@ -4898,10 +4854,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                             setEvlLogCreated(false);
                                                             setShowPeg(false);
                                                             setPegVideoUrl(null);
-                                                            setPegLogCreated(false);
                                                             setShowNvugibOverview(false);
                                                             setNvugibOverviewVideoUrl(null);
-                                                            setNvugibOverviewLogCreated(false);
                                                             setShowNvugibCase(false);
                                                             setNvugibCaseVideoUrl(null);
                                                             setSelectedNvugibCase(null);
@@ -4913,7 +4867,6 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                             setNvugibOverviewError(null);
                                                             setSelectedNvugibOverviewLecture({
                                                                 title: 'NVUGIB 총론 강의',
-                                                                logSlug: 'NVUGIB_overview',
                                                             });
                                                             try {
                                                                 const videoFileName = 'NVUGIB_overview.mp4';
@@ -5039,10 +4992,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                 setEvlLogCreated(false);
                                                                 setShowPeg(false);
                                                                 setPegVideoUrl(null);
-                                                                setPegLogCreated(false);
                                                                 setShowNvugibOverview(false);
                                                                 setNvugibOverviewVideoUrl(null);
-                                                                setNvugibOverviewLogCreated(false);
 
                                                                 setLoadingNvugibCase(true);
                                                                 setNvugibCaseError(null);
@@ -5104,41 +5055,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 userHospital={userProfile?.hospital}
                                                 videoTitle={selectedDiagnosticEus || undefined}
                                                 category="Advanced course for F2"
-                                                onPlay={async () => {
-                                                    // Create log file when video starts playing
-                                                    if (selectedDiagnosticEus && userProfile && !diagnosticEusLogCreated.has(selectedDiagnosticEus)) {
-                                                        try {
-                                                            const logFileName = `${userProfile.position}-${userProfile.name}-${selectedDiagnosticEus}`;
-                                                            const logContent = `Position: ${userProfile.position}
-Name: ${userProfile.name}
-Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
-Category: Advanced course for F2
-Section: 진단 EUS 강의
-Lecture Title: ${selectedDiagnosticEus}
-Action: Video Play
-Timestamp: ${new Date().toISOString()}
-Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                            const response = await trackedLearningFetch('/api/log/create', {
-                                                                method: 'POST',
-                                                                headers: {
-                                                                    'Content-Type': 'application/json',
-                                                                },
-                                                                body: JSON.stringify({
-                                                                    fileName: logFileName,
-                                                                    content: logContent,
-                                                                }),
-                                                            });
-
-                                                            if (response.ok) {
-                                                                setDiagnosticEusLogCreated(prev => new Set(prev).add(selectedDiagnosticEus));
-                                                            }
-                                                        } catch (error) {
-                                                            console.error('Error creating log file:', error);
-                                                        }
-                                                    }
-                                                }}
+                                                completionMode="percentage"
                                                 onClose={() => {
                                                     setShowDiagnosticEus(false);
                                                     setDiagnosticEusVideoUrl(null);
@@ -5402,7 +5319,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                             <div className="relative w-full h-full flex bg-black">
                                                 {/* 닫기 버튼 */}
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={async () => {
+                                                        if (!(await confirmActiveLearningExit())) return;
                                                         setShowEgdDxImage(false);
                                                         setEgdDxImageUrl(null);
                                                         setSelectedEgdDxImage(null);
@@ -5412,6 +5330,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                         setEgdDxInstruction1Error(null);
                                                         setEgdDxInstruction2Error(null);
                                                         setShowEgdDxInstruction2(false);
+                                                        setEgdDxSubmissionError(null);
                                                     }}
                                                     className="absolute top-4 right-4 z-50 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-colors"
                                                     aria-label="닫기"
@@ -5485,53 +5404,48 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                     {/* 진행 버튼 */}
                                                     <button
                                                         onClick={async () => {
-                                                            setShowEgdDxInstruction2(true);
-
-                                                            // Create log file
-                                                            if (userProfile && selectedEgdDxImage) {
-                                                                try {
-                                                                    // Remove extension from image name
-                                                                    const imageNameWithoutExt = selectedEgdDxImage.replace(/\.[^/.]+$/, '');
-                                                                    const logFileName = `${userProfile.position}-${userProfile.name}-F1_${imageNameWithoutExt}`;
-
-                                                                    const logContent = `Position: ${userProfile.position}
+                                                            if (!user?.email || !userProfile || !selectedEgdDxImage) {
+                                                                setEgdDxSubmissionError('사용자 정보를 확인할 수 없어 완료 기록을 전송하지 못했습니다.');
+                                                                return;
+                                                            }
+                                                            setSubmittingEgdDx(true);
+                                                            setEgdDxSubmissionError(null);
+                                                            try {
+                                                                const imageNameWithoutExt = selectedEgdDxImage.replace(/\.[^/.]+$/, '');
+                                                                const logFileName = `${userProfile.position}-${userProfile.name}-F1_${imageNameWithoutExt}`;
+                                                                const logContent = `Position: ${userProfile.position}
 Name: ${userProfile.name}
 Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
+Email: ${user.email}
 Category: Advanced course for F1
 Section: EGD lesion Dx
 Image Name: ${selectedEgdDxImage}
 Action: Progress Button Click
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                                    const response = await trackedLearningFetch('/api/log/egd-lesion-dx', {
-                                                                        method: 'POST',
-                                                                        headers: {
-                                                                            'Content-Type': 'application/json',
-                                                                        },
-                                                                        body: JSON.stringify({
-                                                                            fileName: logFileName,
-                                                                            content: logContent,
-                                                                        }),
-                                                                    });
-
-                                                                    if (!response.ok) {
-                                                                        console.error('Failed to create log file');
-                                                                    }
-                                                                } catch (error) {
-                                                                    console.error('Error creating log file:', error);
-                                                                }
+                                                                const response = await trackedLearningFetch('/api/log/egd-lesion-dx', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ fileName: logFileName, content: logContent }),
+                                                                });
+                                                                if (!response.ok) throw new Error('Failed to create EGD lesion Dx log');
+                                                                setShowEgdDxInstruction2(true);
+                                                            } catch (error) {
+                                                                console.error('Error creating log file:', error);
+                                                                setEgdDxSubmissionError('완료 기록을 전송하지 못했습니다. 진행 버튼을 다시 눌러 주세요.');
+                                                            } finally {
+                                                                setSubmittingEgdDx(false);
                                                             }
                                                         }}
-                                                        disabled={showEgdDxInstruction2 || !egdDxInstruction2}
-                                                        className={`px-6 py-3 rounded-lg font-medium transition-colors flex-none ${showEgdDxInstruction2 || !egdDxInstruction2
+                                                        disabled={showEgdDxInstruction2 || submittingEgdDx || !egdDxInstruction2}
+                                                        className={`px-6 py-3 rounded-lg font-medium transition-colors flex-none ${showEgdDxInstruction2 || submittingEgdDx || !egdDxInstruction2
                                                             ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
                                                             : 'bg-blue-500 hover:bg-blue-400 text-white transition-all duration-300 ease-in-out'
                                                             }`}
                                                     >
-                                                        진행
+                                                        {submittingEgdDx ? '전송 중...' : '진행'}
                                                     </button>
+                                                    {egdDxSubmissionError && <p className="text-red-300 text-sm">{egdDxSubmissionError}</p>}
 
                                                     {/* 두 번째 메시지 박스 (조건부 표시) */}
                                                     {showEgdDxInstruction2 && (
@@ -5587,14 +5501,23 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                 key={index}
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
+                                                                    if (!(await confirmActiveLearningExit())) return;
+                                                                    if (!user?.email || !userProfile) {
+                                                                        alert('사용자 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
+                                                                        return;
+                                                                    }
                                                                     setSelectedEgdDxImage(imageName);
                                                                     if (user?.email && userProfile) {
                                                                         const imageBase = imageName.replace(/\.[^/.]+$/, '');
-                                                                        recordLearningLogAttempt({
+                                                                        startLearningLogAttempt({
                                                                             email: user.email,
                                                                             key: `log_EGD_Lesion_Dx/${userProfile.position}-${userProfile.name}-F1_${imageBase}`,
                                                                             label: `EGD lesion Dx F1: ${imageBase}`,
-                                                                            completedLocally: false,
+                                                                        });
+                                                                        setActiveLearningAttempt({
+                                                                            kind: 'log', email: user.email,
+                                                                            key: `log_EGD_Lesion_Dx/${userProfile.position}-${userProfile.name}-F1_${imageBase}`,
+                                                                            label: `EGD lesion Dx F1: ${imageBase}`,
                                                                         });
                                                                     }
                                                                     setLoadingEgdDxImage(true);
@@ -5603,6 +5526,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                     setEgdDxInstruction2('');
                                                                     setEgdDxInstruction1Error(null);
                                                                     setEgdDxInstruction2Error(null);
+                                                                    setEgdDxSubmissionError(null);
                                                                     setLoadingEgdDxInstruction1(true);
                                                                     setLoadingEgdDxInstruction2(true);
                                                                     setShowEgdDxImage(true);
@@ -5708,7 +5632,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                             <div className="relative w-full h-full flex bg-black">
                                                 {/* 닫기 버튼 */}
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={async () => {
+                                                        if (!(await confirmActiveLearningExit())) return;
                                                         setShowEgdDxImageF2(false);
                                                         setEgdDxImageUrlF2(null);
                                                         setSelectedEgdDxImageF2(null);
@@ -5718,6 +5643,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                         setEgdDxInstruction1ErrorF2(null);
                                                         setEgdDxInstruction2ErrorF2(null);
                                                         setShowEgdDxInstruction2F2(false);
+                                                        setEgdDxSubmissionErrorF2(null);
                                                     }}
                                                     className="absolute top-4 right-4 z-50 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-colors"
                                                     aria-label="닫기"
@@ -5791,53 +5717,48 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                     {/* 진행 버튼 */}
                                                     <button
                                                         onClick={async () => {
-                                                            setShowEgdDxInstruction2F2(true);
-
-                                                            // Create log file
-                                                            if (userProfile && selectedEgdDxImageF2) {
-                                                                try {
-                                                                    // Remove extension from image name
-                                                                    const imageNameWithoutExt = selectedEgdDxImageF2.replace(/\.[^/.]+$/, '');
-                                                                    const logFileName = `${userProfile.position}-${userProfile.name}-F2_${imageNameWithoutExt}`;
-
-                                                                    const logContent = `Position: ${userProfile.position}
+                                                            if (!user?.email || !userProfile || !selectedEgdDxImageF2) {
+                                                                setEgdDxSubmissionErrorF2('사용자 정보를 확인할 수 없어 완료 기록을 전송하지 못했습니다.');
+                                                                return;
+                                                            }
+                                                            setSubmittingEgdDxF2(true);
+                                                            setEgdDxSubmissionErrorF2(null);
+                                                            try {
+                                                                const imageNameWithoutExt = selectedEgdDxImageF2.replace(/\.[^/.]+$/, '');
+                                                                const logFileName = `${userProfile.position}-${userProfile.name}-F2_${imageNameWithoutExt}`;
+                                                                const logContent = `Position: ${userProfile.position}
 Name: ${userProfile.name}
 Hospital: ${userProfile.hospital}
-Email: ${user?.email || ''}
+Email: ${user.email}
 Category: Advanced course for F2
 Section: EGD lesion Dx
 Image Name: ${selectedEgdDxImageF2}
 Action: Progress Button Click
 Timestamp: ${new Date().toISOString()}
 Date: ${new Date().toLocaleString('ko-KR')}`;
-
-                                                                    const response = await trackedLearningFetch('/api/log/egd-lesion-dx', {
-                                                                        method: 'POST',
-                                                                        headers: {
-                                                                            'Content-Type': 'application/json',
-                                                                        },
-                                                                        body: JSON.stringify({
-                                                                            fileName: logFileName,
-                                                                            content: logContent,
-                                                                        }),
-                                                                    });
-
-                                                                    if (!response.ok) {
-                                                                        console.error('Failed to create log file');
-                                                                    }
-                                                                } catch (error) {
-                                                                    console.error('Error creating log file:', error);
-                                                                }
+                                                                const response = await trackedLearningFetch('/api/log/egd-lesion-dx', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ fileName: logFileName, content: logContent }),
+                                                                });
+                                                                if (!response.ok) throw new Error('Failed to create EGD lesion Dx log');
+                                                                setShowEgdDxInstruction2F2(true);
+                                                            } catch (error) {
+                                                                console.error('Error creating log file:', error);
+                                                                setEgdDxSubmissionErrorF2('완료 기록을 전송하지 못했습니다. 진행 버튼을 다시 눌러 주세요.');
+                                                            } finally {
+                                                                setSubmittingEgdDxF2(false);
                                                             }
                                                         }}
-                                                        disabled={showEgdDxInstruction2F2 || !egdDxInstruction2F2}
-                                                        className={`px-6 py-3 rounded-lg font-medium transition-colors flex-none ${showEgdDxInstruction2F2 || !egdDxInstruction2F2
+                                                        disabled={showEgdDxInstruction2F2 || submittingEgdDxF2 || !egdDxInstruction2F2}
+                                                        className={`px-6 py-3 rounded-lg font-medium transition-colors flex-none ${showEgdDxInstruction2F2 || submittingEgdDxF2 || !egdDxInstruction2F2
                                                             ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
                                                             : 'bg-blue-500 hover:bg-blue-400 text-white transition-all duration-300 ease-in-out'
                                                             }`}
                                                     >
-                                                        진행
+                                                        {submittingEgdDxF2 ? '전송 중...' : '진행'}
                                                     </button>
+                                                    {egdDxSubmissionErrorF2 && <p className="text-red-300 text-sm">{egdDxSubmissionErrorF2}</p>}
 
                                                     {/* 두 번째 메시지 박스 (조건부 표시) */}
                                                     {showEgdDxInstruction2F2 && (
@@ -5893,14 +5814,23 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                 key={index}
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
+                                                                    if (!(await confirmActiveLearningExit())) return;
+                                                                    if (!user?.email || !userProfile) {
+                                                                        alert('사용자 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
+                                                                        return;
+                                                                    }
                                                                     setSelectedEgdDxImageF2(imageName);
                                                                     if (user?.email && userProfile) {
                                                                         const imageBase = imageName.replace(/\.[^/.]+$/, '');
-                                                                        recordLearningLogAttempt({
+                                                                        startLearningLogAttempt({
                                                                             email: user.email,
                                                                             key: `log_EGD_Lesion_Dx/${userProfile.position}-${userProfile.name}-F2_${imageBase}`,
                                                                             label: `EGD lesion Dx F2: ${imageBase}`,
-                                                                            completedLocally: false,
+                                                                        });
+                                                                        setActiveLearningAttempt({
+                                                                            kind: 'log', email: user.email,
+                                                                            key: `log_EGD_Lesion_Dx/${userProfile.position}-${userProfile.name}-F2_${imageBase}`,
+                                                                            label: `EGD lesion Dx F2: ${imageBase}`,
                                                                         });
                                                                     }
                                                                     setLoadingEgdDxImageF2(true);
@@ -5909,6 +5839,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                     setEgdDxInstruction2F2('');
                                                                     setEgdDxInstruction1ErrorF2(null);
                                                                     setEgdDxInstruction2ErrorF2(null);
+                                                                    setEgdDxSubmissionErrorF2(null);
                                                                     setLoadingEgdDxInstruction1F2(true);
                                                                     setLoadingEgdDxInstruction2F2(true);
                                                                     setShowEgdDxImageF2(true);
@@ -6294,6 +6225,8 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                 userHospital={userProfile?.hospital}
                                                 videoTitle={selectedEgdVariationCode || undefined}
                                                 category="EGD variation"
+                                                completionMode="onPlay"
+                                                completionLogKey={userProfile && selectedEgdVariationCode ? `log/${userProfile.position}-${userProfile.name}-${selectedEgdVariationCode}` : undefined}
                                                 onPlay={async () => {
                                                     // Create log file when video starts playing
                                                     if (selectedEgdVariationCode && userProfile && !egdVariationLogCreated.has(selectedEgdVariationCode)) {
@@ -6597,6 +6530,22 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                     setShowEgdDxImageWindowF2(false);
                 }}
             />
+
+            {pendingLearningExit && (
+                <LearningExitDialog
+                    label={pendingLearningExit.label}
+                    kind={pendingLearningExit.kind}
+                    reason={pendingLearningExit.reason}
+                    onStay={() => {
+                        pendingLearningExit.decide(false);
+                        setPendingLearningExit(null);
+                    }}
+                    onLeave={() => {
+                        pendingLearningExit.decide(true);
+                        setPendingLearningExit(null);
+                    }}
+                />
+            )}
 
             {/* EMT 마커 검출 시각화 모달 */}
             {showEmtVisualization && emtVisualizationUrls.length > 0 && (

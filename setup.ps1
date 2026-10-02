@@ -1,4 +1,4 @@
-# ============================================
+﻿# ============================================
 # UGI Education Program - 자동 설정 스크립트 (Windows)
 # ============================================
 # 이 스크립트는 프로젝트를 처음 설정할 때 필요한 작업을 자동화합니다.
@@ -11,7 +11,7 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Node.js 버전 확인
-Write-Host "[1/6] Node.js 버전 확인 중..." -ForegroundColor Yellow
+Write-Host "[1/5] Node.js 버전 확인 중..." -ForegroundColor Yellow
 try {
     $nodeVersion = node -v
     $nodeMajorVersion = [int]($nodeVersion -replace 'v(\d+)\..*', '$1')
@@ -31,7 +31,7 @@ catch {
 Write-Host ""
 
 # npm 버전 확인
-Write-Host "[2/6] npm 버전 확인 중..." -ForegroundColor Yellow
+Write-Host "[2/5] npm 버전 확인 중..." -ForegroundColor Yellow
 try {
     $npmVersion = npm -v
     Write-Host "✅ npm 버전: $npmVersion" -ForegroundColor Green
@@ -43,7 +43,7 @@ catch {
 Write-Host ""
 
 # Node.js 의존성 설치
-Write-Host "[3/6] Node.js 의존성 설치 중..." -ForegroundColor Yellow
+Write-Host "[3/5] Node.js 의존성 설치 중..." -ForegroundColor Yellow
 Write-Host "이 작업은 몇 분이 걸릴 수 있습니다..." -ForegroundColor Gray
 try {
     npm install
@@ -56,7 +56,7 @@ catch {
 Write-Host ""
 
 # Python 확인 (선택사항)
-Write-Host "[4/6] Python 확인 중 (선택사항)..." -ForegroundColor Yellow
+Write-Host "[4/5] Python 확인 중 (선택사항)..." -ForegroundColor Yellow
 try {
     $pythonVersion = python --version 2>&1
     Write-Host "✅ Python 버전: $pythonVersion" -ForegroundColor Green
@@ -79,7 +79,7 @@ catch {
 Write-Host ""
 
 # .env.local 파일 확인 및 생성
-Write-Host "[5/6] 환경 변수 파일 확인 중..." -ForegroundColor Yellow
+Write-Host "[5/5] 환경 변수 파일 확인 중..." -ForegroundColor Yellow
 if (-not (Test-Path ".env.local")) {
     if (Test-Path ".env.example") {
         Write-Host ".env.local 파일이 없습니다. .env.example에서 생성합니다..." -ForegroundColor Yellow
@@ -96,19 +96,6 @@ else {
 }
 Write-Host ""
 
-# secret 디렉토리 확인
-Write-Host "[6/6] secret 디렉토리 확인 중..." -ForegroundColor Yellow
-if (-not (Test-Path "secret")) {
-    Write-Host "secret 디렉토리를 생성합니다..." -ForegroundColor Yellow
-    New-Item -ItemType Directory -Path "secret" | Out-Null
-    Write-Host "✅ secret 디렉토리가 생성되었습니다." -ForegroundColor Green
-    Write-Host "⚠️  중요: secret\ 디렉토리에 Firebase Admin SDK 키 파일을 배치해주세요!" -ForegroundColor Yellow
-}
-else {
-    Write-Host "✅ secret 디렉토리가 이미 존재합니다." -ForegroundColor Green
-}
-Write-Host ""
-
 # 완료 메시지
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "✅ 프로젝트 설정이 완료되었습니다!" -ForegroundColor Green
@@ -116,7 +103,7 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "다음 단계:"
 Write-Host "1. .env.local 파일을 열어서 Firebase 및 기타 API 키를 설정하세요"
-Write-Host "2. secret\ 디렉토리에 Firebase Admin SDK 키 파일을 배치하세요"
+Write-Host "2. Firebase Admin 인증 변수 3개를 설정하거나 ADC를 사용하세요"
 Write-Host "3. 개발 서버를 실행하세요: npm run dev"
 Write-Host ""
 Write-Host "자세한 설정 방법은 README.md를 참조하세요."

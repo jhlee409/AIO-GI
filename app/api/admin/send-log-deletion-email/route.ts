@@ -3,8 +3,11 @@
  * Sends email with CSV attachment to admin
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { csvFileName, csvContent, fileCount } = await request.json();
 

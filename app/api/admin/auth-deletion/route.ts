@@ -8,13 +8,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAuth, getAdminRealtimeDb } from '@/lib/firebase-admin';
 
 import { isSuperAdminEmail, isPrimaryAdminEmail } from '@/lib/auth-server';
+import { requireAdmin } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminAuth = getAdminAuth();
         const body = await request.json();
-        const { hospitals, positions, name, userEmails, requesterEmail } = body;
-        const isRequesterSuperAdmin = isSuperAdminEmail(requesterEmail);
+        const { hospitals, positions, name, userEmails } = body;
+        if (!Array.isArray(userEmails) || userEmails.length === 0 ||
+            !userEmails.every((email: unknown) => typeof email === 'string' && email.trim())) {
+            return NextResponse.json({ error: 'Selected user emails are required' }, { status: 400 });
+        }
+        const selectedEmails = new Set(userEmails.map((email: string) => email.trim().toLowerCase()));
+        const isRequesterSuperAdmin = isSuperAdminEmail(access.email);
 
         const results = {
             deleted: 0,
@@ -30,6 +38,7 @@ export async function POST(request: NextRequest) {
         do {
             const listUsersResult = await adminAuth.listUsers(1000, nextPageToken);
             for (const user of listUsersResult.users) {
+                if (!user.email || !selectedEmails.has(user.email.toLowerCase())) continue;
                 if (user.email && isSuperAdminEmail(user.email)) {
                     results.skipped++;
                     continue;
@@ -60,10 +69,10 @@ export async function POST(request: NextRequest) {
                 await adminAuth.deleteUser(user.uid);
                 results.deleted++;
                 results.deletedUsers.push(user);
-            } catch (err: any) {
+            } catch (err) {
                 console.error(`Failed to delete user ${user.email || user.uid}:`, err);
                 results.failed++;
-                results.errors.push(`${user.email || user.uid}: ${err.message || '알 수 없는 오류'}`);
+                results.errors.push(`${user.email || user.uid}: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
             }
         }
 
@@ -88,7 +97,7 @@ export async function POST(request: NextRequest) {
                 const recordRef = realtimeDb.ref('auth_deletions').push();
                 await recordRef.set(deletionRecord);
                 console.log(`Deletion record saved with key: ${recordRef.key}`);
-            } catch (dbError: any) {
+            } catch (dbError) {
                 console.error('Error saving deletion record to Realtime Database:', dbError);
                 // Continue even if database save fails
             }
@@ -103,10 +112,10 @@ export async function POST(request: NextRequest) {
                 errors: results.errors.slice(0, 10), // Limit errors to first 10
             },
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Error in auth deletion route:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to delete users from Firebase Authentication' },
+            { error: error instanceof Error ? error.message : 'Failed to delete users from Firebase Authentication' },
             { status: 500 }
         );
     }

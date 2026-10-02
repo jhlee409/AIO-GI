@@ -4,9 +4,6 @@
  */
 
 import sharp from 'sharp';
-import { createReadStream } from 'fs';
-import { parse } from 'csv-parse/sync';
-import { Matrix } from 'ml-matrix';
 import * as fs from 'fs/promises';
 
 export interface VisualizationFrame {

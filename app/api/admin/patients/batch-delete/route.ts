@@ -4,12 +4,15 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { requireAdmin } from '@/lib/api-auth';
 
 const USERS_COLLECTION = 'users';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
-        const { userIds, requesterEmail } = await request.json();
+        const { userIds } = await request.json();
 
         if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
             return NextResponse.json(
@@ -21,7 +24,7 @@ export async function POST(request: NextRequest) {
         const adminDb = getAdminDb();
 
         // Protect jhlee409@gmail.com record
-        const isRequesterProtected = requesterEmail?.toLowerCase() === 'jhlee409@gmail.com';
+        const isRequesterProtected = access.email === 'jhlee409@gmail.com';
         const filteredIds: string[] = [];
 
         for (const userId of userIds) {

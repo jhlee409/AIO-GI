@@ -31,7 +31,7 @@ export default function AdminContentsPage() {
         },
     });
 
-    const handleItemsChange = async (updatedItems: any[]) => {
+    const handleItemsChange = async () => {
         // Reload from Firestore to ensure consistency
         await loadItems();
     };

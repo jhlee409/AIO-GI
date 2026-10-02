@@ -19,7 +19,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Node.js 버전 확인
-echo -e "${YELLOW}[1/6] Node.js 버전 확인 중...${NC}"
+echo -e "${YELLOW}[1/5] Node.js 버전 확인 중...${NC}"
 if ! command -v node &> /dev/null; then
     echo -e "${RED}❌ Node.js가 설치되어 있지 않습니다.${NC}"
     echo "Node.js 18.x 이상을 설치해주세요: https://nodejs.org/"
@@ -35,7 +35,7 @@ echo -e "${GREEN}✅ Node.js 버전: $(node -v)${NC}"
 echo ""
 
 # npm 버전 확인
-echo -e "${YELLOW}[2/6] npm 버전 확인 중...${NC}"
+echo -e "${YELLOW}[2/5] npm 버전 확인 중...${NC}"
 if ! command -v npm &> /dev/null; then
     echo -e "${RED}❌ npm이 설치되어 있지 않습니다.${NC}"
     exit 1
@@ -44,14 +44,14 @@ echo -e "${GREEN}✅ npm 버전: $(npm -v)${NC}"
 echo ""
 
 # Node.js 의존성 설치
-echo -e "${YELLOW}[3/6] Node.js 의존성 설치 중...${NC}"
+echo -e "${YELLOW}[3/5] Node.js 의존성 설치 중...${NC}"
 echo "이 작업은 몇 분이 걸릴 수 있습니다..."
 npm install
 echo -e "${GREEN}✅ Node.js 의존성 설치 완료${NC}"
 echo ""
 
 # Python 확인 (선택사항)
-echo -e "${YELLOW}[4/6] Python 확인 중 (선택사항)...${NC}"
+echo -e "${YELLOW}[4/5] Python 확인 중 (선택사항)...${NC}"
 if command -v python3 &> /dev/null; then
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
     echo -e "${GREEN}✅ Python 버전: $PYTHON_VERSION${NC}"
@@ -74,7 +74,7 @@ fi
 echo ""
 
 # .env.local 파일 확인 및 생성
-echo -e "${YELLOW}[5/6] 환경 변수 파일 확인 중...${NC}"
+echo -e "${YELLOW}[5/5] 환경 변수 파일 확인 중...${NC}"
 if [ ! -f ".env.local" ]; then
     if [ -f ".env.example" ]; then
         echo -e "${YELLOW}.env.local 파일이 없습니다. .env.example에서 생성합니다...${NC}"
@@ -89,18 +89,6 @@ else
 fi
 echo ""
 
-# secret 디렉토리 확인
-echo -e "${YELLOW}[6/6] secret 디렉토리 확인 중...${NC}"
-if [ ! -d "secret" ]; then
-    echo -e "${YELLOW}secret 디렉토리를 생성합니다...${NC}"
-    mkdir -p secret
-    echo -e "${GREEN}✅ secret 디렉토리가 생성되었습니다.${NC}"
-    echo -e "${YELLOW}⚠️  중요: secret/ 디렉토리에 Firebase Admin SDK 키 파일을 배치해주세요!${NC}"
-else
-    echo -e "${GREEN}✅ secret 디렉토리가 이미 존재합니다.${NC}"
-fi
-echo ""
-
 # 완료 메시지
 echo "============================================"
 echo -e "${GREEN}✅ 프로젝트 설정이 완료되었습니다!${NC}"
@@ -108,7 +96,7 @@ echo "============================================"
 echo ""
 echo "다음 단계:"
 echo "1. .env.local 파일을 열어서 Firebase 및 기타 API 키를 설정하세요"
-echo "2. secret/ 디렉토리에 Firebase Admin SDK 키 파일을 배치하세요"
+echo "2. Firebase Admin 인증 변수 3개를 설정하거나 ADC를 사용하세요"
 echo "3. 개발 서버를 실행하세요: npm run dev"
 echo ""
 echo "자세한 설정 방법은 README.md를 참조하세요."

@@ -24,8 +24,27 @@ export const TRACKED_F1_WATCH_TIME_LECTURE_TITLES = [
     'APC',
     'NexPowder',
     'EVL',
+    'PEG',
+    'NVUGIB 총론 강의',
     'Stent_Eso_GEjunction',
 ];
+
+/** These lectures only earn an instructor log after 80% viewing. */
+const COMPLETION_LOG_VIDEO_ITEMS: Record<string, string> = {
+    PEG: 'PEG',
+    'NVUGIB 총론 강의': 'NVUGIB_overview',
+    '내과전공의를 위한 NVUGIB Mx의 기초': 'NVUGIB_Mx_basics_for_residents',
+    EUS_basic: 'EUS_basic',
+    EUS_SET: 'EUS_SET',
+    EUS_case: 'EUS_case',
+};
+
+export function getWatchTimeCompletionLogItem(videoTitle?: string | null): string | null {
+    if (!videoTitle) return null;
+    const title = Object.keys(COMPLETION_LOG_VIDEO_ITEMS)
+        .find(candidate => watchTimeTitlesMatch(candidate, videoTitle));
+    return title ? COMPLETION_LOG_VIDEO_ITEMS[title] : null;
+}
 
 export const HEMOSTASIS_CASE_VIDEO_TITLES = [
     'angiodysplasia_01', 'angiodysplasia_02', 'barogenic_tear_01',
@@ -49,10 +68,13 @@ export function isHemostasisCaseVideo(title?: string | null): boolean {
 }
 
 const WATCH_TIME_TITLE_ALIASES = [
+    ['PEG', '7. PEG', 'PEG_orientation'],
+    ['NVUGIB 총론 강의', 'NVUGIB_overview', '1. NVUGIB 총론 강의'],
     [
         '내과전공의를 위한 NVUGIB Mx의 기초',
         'Fundamentals_of_NVUGIB_Management',
         'Fundamentals_of_NVUGIB_Management.mp4',
+        'NVUGIB_Mx_basics_for_residents',
     ],
 ];
 
@@ -170,11 +192,10 @@ export function findWatchTimeReportMatch<T extends WatchTimeReportEntry>(
         if (key.includes('::')) {
             const [keyCategory, ...keyTitleParts] = key.split('::');
             const keyTitle = keyTitleParts.join('::');
-            if (
-                normalizeWatchTimeCategory(keyCategory) === reportCategoryLower &&
-                watchTimeTitlesMatch(keyTitle, lectureTitleLower)
-            ) {
-                score = 100;
+            if (watchTimeTitlesMatch(keyTitle, lectureTitleLower)) {
+                const sameCategory = normalizeWatchTimeCategory(keyCategory) === reportCategoryLower;
+                if (!sameCategory && !getWatchTimeCompletionLogItem(lectureTitleLower)) continue;
+                score = sameCategory ? 100 : 80;
                 isMatch = true;
             }
         } else if (watchTimeTitlesMatch(keyLower, lectureTitleLower)) {
@@ -209,5 +230,5 @@ export function formatWatchTimeReportValue(totalPercentage: number): string {
         return 'yes';
     }
 
-    return `${Math.round(totalPercentage)}%`;
+    return `${Math.floor(totalPercentage)}%`;
 }

@@ -2,10 +2,13 @@
  * API Route: Get Filter Options
  * Gets unique hospitals and positions from users collection
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireInstructor } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const access = await requireInstructor(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminDb = getAdminDb();
         let snapshot = await adminDb.collection('users').get();
@@ -24,6 +27,7 @@ export async function GET() {
         snapshot.docs.forEach(doc => {
             const data = doc.data();
             const hospital = data['병원'] || data['병원명'] || data['hospital'];
+            if (!access.isAdmin && hospital !== access.hospital) return;
             let position = data['직위'] || data['position'];
 
             if (hospital && typeof hospital === 'string') {

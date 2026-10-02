@@ -4,14 +4,25 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase-admin';
+import { requireInstructor } from '@/lib/api-auth';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
-import { logLectureTitleMatches } from '@/lib/report-log-match';
+import { isReportableLearningLog, logLectureTitleMatches } from '@/lib/report-log-match';
 
 export async function POST(request: NextRequest) {
+    const access = await requireInstructor(request);
+    if (access instanceof NextResponse) return access;
     try {
-        const { hospitals, positions, name, categories } = await request.json();
+        const requestBody = await request.json();
+        let { hospitals } = requestBody;
+        const { positions, name, categories } = requestBody;
+        if (!access.isAdmin) {
+            if (Array.isArray(hospitals) && hospitals.some((hospital: unknown) => hospital !== access.hospital)) {
+                return NextResponse.json({ error: '자신이 속한 병원만 선택할 수 있습니다.' }, { status: 403 });
+            }
+            hospitals = [access.hospital];
+        }
 
         // 1. Get filtered users (try users collection first, fallback to patients for backward compatibility)
         const adminDb = getAdminDb();
@@ -138,7 +149,7 @@ export async function POST(request: NextRequest) {
         const [files] = await bucket.getFiles({ prefix: logPrefix });
         const logFileNames = files
             .map(file => file.name.split('/').pop() || file.name)
-            .filter(fileName => fileName && fileName.length > 0);
+            .filter(fileName => fileName && isReportableLearningLog(fileName));
 
         // 4. Read template Excel file
         // Use process.cwd() which should point to project root in Next.js API routes

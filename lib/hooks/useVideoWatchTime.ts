@@ -8,10 +8,11 @@ import { getVideoAttemptId, recordVideoProgress, startVideoAttempt } from '@/lib
 
 export interface UseVideoWatchTimeOptions extends UseSaveVideoWatchTimeOptions {
     onThresholdReached?: () => void;
+    enabled?: boolean;
 }
 
 export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
-    const { onThresholdReached, ...saveOptions } = options;
+    const { onThresholdReached, enabled = true, ...saveOptions } = options;
     const { saveWatchTime } = useSaveVideoWatchTime(saveOptions);
 
     const elapsedPlaybackSecondsRef = useRef(0);
@@ -19,6 +20,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
     const [elapsedPlaybackSeconds, setElapsedPlaybackSeconds] = useState(0);
     const [totalDuration, setTotalDuration] = useState(0);
     const [thresholdReached, setThresholdReached] = useState(false);
+    const thresholdReachedRef = useRef(false);
     const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastCheckTimeRef = useRef<number>(0);
 
@@ -46,8 +48,10 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
     }, [getElapsedPlaybackSeconds]);
 
     const markPlaybackStarted = useCallback(() => {
+        if (!enabled) return;
         if (playbackStartedAtMsRef.current === null) {
-            if (elapsedPlaybackSecondsRef.current === 0) {
+            if (elapsedPlaybackSecondsRef.current === 0 && saveOptions.userEmail &&
+                !getVideoAttemptId(saveOptions.userEmail, saveOptions.videoUrl, saveOptions.category)) {
                 startVideoAttempt({
                     email: saveOptions.userEmail,
                     videoUrl: saveOptions.videoUrl,
@@ -57,7 +61,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
             }
             playbackStartedAtMsRef.current = getNowMs();
         }
-    }, [getNowMs, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
+    }, [enabled, getNowMs, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
 
     const markPlaybackStopped = useCallback(() => {
         if (playbackStartedAtMsRef.current !== null) {
@@ -73,11 +77,13 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         setElapsedPlaybackSeconds(0);
         setTotalDuration(0);
         setThresholdReached(false);
+        thresholdReachedRef.current = false;
         lastCheckTimeRef.current = 0;
     }, [saveOptions.videoUrl]);
 
     // 주기적으로 시청 시간 체크 및 저장 (30초마다)
     const trackWatchTime = useCallback((currentTime: number, duration: number) => {
+        if (!enabled) return;
         if (isNaN(currentTime) || isNaN(duration) || duration <= 0) {
             console.warn('[useVideoWatchTime] trackWatchTime called with invalid values:', {
                 currentTime,
@@ -105,9 +111,12 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
             duration,
         });
 
-        // 30초마다 서버에 체크 (action: 'check')
+        const percentage = (actualWatchedTime / duration) * 100;
+        const reachedThresholdNow = percentage >= 80 && !thresholdReachedRef.current;
+
+        // Save on the first 80% crossing as well as during periodic checks.
         const now = Date.now();
-        if (now - lastCheckTimeRef.current >= 30000) {
+        if (reachedThresholdNow || now - lastCheckTimeRef.current >= 30000) {
             lastCheckTimeRef.current = now;
             console.log('[useVideoWatchTime] 30s check - saving watch time:', {
                 currentTime,
@@ -119,18 +128,19 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         }
 
         // 80% 도달 체크
-        const percentage = (actualWatchedTime / duration) * 100;
-        if (percentage >= 80 && !thresholdReached) {
+        if (reachedThresholdNow) {
+            thresholdReachedRef.current = true;
             setThresholdReached(true);
             console.log('[useVideoWatchTime] 80% threshold reached!');
             if (onThresholdReached) {
                 onThresholdReached();
             }
         }
-    }, [thresholdReached, onThresholdReached, saveWatchTime, syncElapsedPlaybackSeconds, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
+    }, [enabled, onThresholdReached, saveWatchTime, syncElapsedPlaybackSeconds, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
 
     // 최종 시청 시간 저장 (action: 'update')
     const saveFinalWatchTime = useCallback(async (currentTime: number, duration: number) => {
+        if (!enabled) return null;
         const actualWatchedTime = getElapsedPlaybackSeconds();
         console.log('[useVideoWatchTime] saveFinalWatchTime called:', {
             currentTime,
@@ -174,7 +184,7 @@ export function useVideoWatchTime(options: UseVideoWatchTimeOptions) {
         const result = await saveWatchTime(actualWatchedTime, duration, 'update');
         console.log('[useVideoWatchTime] saveWatchTime result:', result);
         return result;
-    }, [getElapsedPlaybackSeconds, saveWatchTime, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
+    }, [enabled, getElapsedPlaybackSeconds, saveWatchTime, saveOptions.userEmail, saveOptions.videoUrl, saveOptions.videoTitle, saveOptions.category]);
 
     // 컴포넌트 언마운트 시 정리
     useEffect(() => {

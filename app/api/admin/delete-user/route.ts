@@ -6,10 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAuth } from '@/lib/firebase-admin';
 import { isSuperAdminEmail, isPrimaryAdminEmail } from '@/lib/auth-server';
+import { requireAdmin } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
-        const { uid, requesterEmail } = await request.json();
+        const { uid } = await request.json();
 
         if (!uid) {
             return NextResponse.json(
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Other primary admins can only be deleted by super admin
-        if (user.email && isPrimaryAdminEmail(user.email) && !isSuperAdminEmail(requesterEmail)) {
+        if (user.email && isPrimaryAdminEmail(user.email) && !isSuperAdminEmail(access.email)) {
             return NextResponse.json(
                 { error: 'Primary admin can only be deleted by super admin (jhlee409@gmail.com).' },
                 { status: 403 }

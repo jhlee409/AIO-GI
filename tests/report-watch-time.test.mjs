@@ -20,6 +20,7 @@ vm.runInNewContext(compiled.outputText, sandbox);
 const {
   findWatchTimeReportMatch,
   formatWatchTimeReportValue,
+  getWatchTimeCompletionLogItem,
   isTrackedF1WatchTimeLecture,
   isHemostasisCaseVideo,
   shouldTrackVideoWatchRoutine,
@@ -28,7 +29,20 @@ const {
 
 assert.equal(isTrackedF1WatchTimeLecture('내과전공의를 위한 NVUGIB Mx의 기초'), true);
 assert.equal(isTrackedF1WatchTimeLecture('Fundamentals_of_NVUGIB_Management'), true);
-assert.equal(isTrackedF1WatchTimeLecture('NVUGIB 총론 강의'), false);
+assert.equal(isTrackedF1WatchTimeLecture('PEG'), true);
+assert.equal(isTrackedF1WatchTimeLecture('7. PEG'), true);
+assert.equal(isTrackedF1WatchTimeLecture('NVUGIB 총론 강의'), true);
+assert.equal(shouldTrackVideoWatchRoutine('NVUGIB 총론 강의', 'Advanced course for F1'), true);
+for (const [title, logItem] of [
+  ['NVUGIB 총론 강의', 'NVUGIB_overview'],
+  ['내과전공의를 위한 NVUGIB Mx의 기초', 'NVUGIB_Mx_basics_for_residents'],
+  ['EUS_basic', 'EUS_basic'],
+  ['EUS_SET', 'EUS_SET'],
+  ['EUS_case', 'EUS_case'],
+]) {
+  assert.equal(getWatchTimeCompletionLogItem(title), logItem);
+}
+assert.equal(getWatchTimeCompletionLogItem('Unrelated lecture'), null);
 assert.equal(isTrackedF1WatchTimeLecture('Complication'), false);
 assert.equal(isTrackedF1WatchTimeLecture('AP'), false);
 assert.equal(isHemostasisCaseVideo('angiodysplasia_01'), true);
@@ -75,11 +89,13 @@ assert.equal(
 
 assert.equal(formatWatchTimeReportValue(0), '0%');
 assert.equal(formatWatchTimeReportValue(79.4), '79%');
-assert.equal(formatWatchTimeReportValue(79.6), '80%');
+assert.equal(formatWatchTimeReportValue(79.6), '79%');
 assert.equal(formatWatchTimeReportValue(80), 'yes');
 assert.equal(formatWatchTimeReportValue(100), 'yes');
 
 assert.equal(shouldTrackVideoWatchRoutine('Future Lecture', 'Any category', { completionMode: 'percentage' }), true);
+assert.equal(shouldTrackVideoWatchRoutine('PEG', 'Advanced course for F1', { completionMode: 'percentage' }), true);
+assert.equal(watchTimeTitlesMatch('7. PEG', 'PEG'), true);
 assert.equal(shouldTrackVideoWatchRoutine('Complication_Sedation', 'Advanced course for F1'), true);
 assert.equal(shouldTrackVideoWatchRoutine('Complication_Sedation', 'Advanced course for F1', { completionMode: 'none' }), false);
 
@@ -108,6 +124,30 @@ const simulatorMatch = findWatchTimeReportMatch(
 );
 assert.equal(simulatorMatch.key, 'Simulator Advanced Course::Hemoclip');
 assert.equal(formatWatchTimeReportValue(simulatorMatch.watchTime.totalPercentage), '64%');
+
+const pegWatchTimeMap = new Map([[
+  'Advanced course for F1::PEG',
+  { totalPercentage: 79, duration: 100, category: 'Advanced course for F1' },
+]]);
+const pegMatch = findWatchTimeReportMatch(pegWatchTimeMap, 'PEG', 'Advanced course for F1');
+assert.equal(formatWatchTimeReportValue(pegMatch.watchTime.totalPercentage), '79%');
+
+const nvugibWatchTimeMap = new Map([[
+  'Advanced course for F1::NVUGIB 총론 강의',
+  { totalPercentage: 79, duration: 100, category: 'Advanced course for F1' },
+]]);
+assert.equal(
+  formatWatchTimeReportValue(findWatchTimeReportMatch(nvugibWatchTimeMap, 'NVUGIB_overview', '치료 내시경 임상').watchTime.totalPercentage),
+  '79%'
+);
+const eusWatchTimeMap = new Map([[
+  'Advanced course for F2::EUS_basic',
+  { totalPercentage: 80, duration: 100, category: 'Advanced course for F2' },
+]]);
+assert.equal(
+  formatWatchTimeReportValue(findWatchTimeReportMatch(eusWatchTimeMap, 'EUS_basic', '진단 EUS 강의').watchTime.totalPercentage),
+  'yes'
+);
 
 const signedUrlWatchTimeMap = new Map([
   ['https://storage.googleapis.com/example/Complication_Sedation.mp4?token=a1-signed-token', {

@@ -4,6 +4,7 @@
  */
 'use client';
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useState, useMemo, useEffect } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -123,7 +124,7 @@ export default function AdminLectureListTable({ items, onItemsChange }: AdminLec
 
         if (itemId) {
             try {
-                const response = await fetch('/api/admin/lecture-list', {
+                const response = await authenticatedFetch('/api/admin/lecture-list', {
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json',
@@ -149,21 +150,6 @@ export default function AdminLectureListTable({ items, onItemsChange }: AdminLec
         const newItems = items.filter((_, i) => i !== originalIndex);
         onItemsChange?.(newItems);
 
-        // Update selected indices - need to recalculate based on sortedItems
-        const newSelected = new Set<number>();
-        selectedIndices.forEach(i => {
-            if (i !== index) {
-                // Find new index in sorted array after deletion
-                const item = sortedItems[i];
-                const newIndex = newItems.findIndex(newItem => 
-                    (newItem._id || newItem.id) === (item._id || item.id)
-                );
-                if (newIndex >= 0) {
-                    // Need to find position in new sorted array
-                    // For simplicity, just clear and let user reselect
-                }
-            }
-        });
         setSelectedIndices(new Set());
     };
 
@@ -183,7 +169,7 @@ export default function AdminLectureListTable({ items, onItemsChange }: AdminLec
 
         if (itemIds.length > 0) {
             try {
-                const response = await fetch('/api/admin/lecture-list/batch-delete', {
+                const response = await authenticatedFetch('/api/admin/lecture-list/batch-delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

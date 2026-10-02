@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ url });
+        return NextResponse.json({ url }, { headers: { 'Cache-Control': 'private, max-age=300' } });
     } catch (error: any) {
         console.error('Error getting video URL:', error);
         return NextResponse.json(

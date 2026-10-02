@@ -34,22 +34,24 @@ export async function GET(request: NextRequest) {
         
         // 일반적인 이미지 확장자들 시도
         const extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'];
-        let foundFile = null;
-        
-        for (const ext of extensions) {
+        const checkExtension = async (ext: string) => {
             const filePath = `EGD_Dx_training/${version}/images/${imageName}${ext}`;
             const file = bucket.file(filePath);
             try {
                 const [exists] = await file.exists();
                 if (exists) {
-                    foundFile = file;
                     console.log('Found image file:', filePath);
-                    break;
+                    return file;
                 }
             } catch (checkError: any) {
                 console.warn(`Error checking file existence for ${filePath}:`, checkError.message);
-                continue;
             }
+            return null;
+        };
+        let foundFile = await checkExtension(extensions[0]);
+        if (!foundFile) {
+            const alternatives = await Promise.all(extensions.slice(1).map(checkExtension));
+            foundFile = alternatives.find(file => file !== null) || null;
         }
         
         if (!foundFile) {
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ url });
+        return NextResponse.json({ url }, { headers: { 'Cache-Control': 'private, max-age=300' } });
     } catch (error: any) {
         console.error('Error fetching EGD Dx image URL:', error);
         console.error('Error stack:', error.stack);

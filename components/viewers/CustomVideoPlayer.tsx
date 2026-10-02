@@ -2,12 +2,7 @@
  * Custom Video Player Component
  * Video player with custom controls: play, pause, stop, progress bar
  * 
- * 이 컴포넌트의 포맷은 템플릿으로 저장되어 있습니다.
- * 다른 화면에서 동일한 포맷을 적용하려면:
- * - 이 컴포넌트를 직접 사용하거나
- * - @/components/viewers/templates/videoPlayerFormat.ts 템플릿을 참고하세요.
- * 
- * 템플릿 문서: components/viewers/templates/VIDEO_PLAYER_FORMAT.md
+ * 다른 화면에서도 동일한 재생 동작이 필요하면 이 컴포넌트를 사용하세요.
  */
 'use client';
 
@@ -18,6 +13,8 @@ import { shouldTrackVideoWatchRoutine, type VideoCompletionMode } from '@/lib/re
 
 export interface CustomVideoPlayerRef {
     saveWatchTime: () => Promise<void>;
+    pauseVideo: () => void;
+    allowAnotherSave: () => void;
 }
 
 interface CustomVideoPlayerProps {
@@ -85,7 +82,8 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         videoUrl,
         videoTitle,
         category,
-        onThresholdReached
+        onThresholdReached,
+        enabled: shouldTrackWatchTime,
     });
 
     // trackWatchTime과 saveFinalWatchTime을 ref로 저장하여 useEffect dependency 문제 방지
@@ -113,6 +111,11 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
 
     // 부모 컴포넌트에서 saveWatchTime을 호출할 수 있도록 ref 노출
     useImperativeHandle(ref, () => ({
+        allowAnotherSave: () => { hasSavedFinalRef.current = false; },
+        pauseVideo: () => {
+            userPausedRef.current = true;
+            videoRef.current?.pause();
+        },
         saveWatchTime: async () => {
             console.log('[CustomVideoPlayer] saveWatchTime called via ref:', {
                 shouldTrackWatchTime,

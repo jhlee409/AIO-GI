@@ -2,10 +2,13 @@
  * API Route: Get Lecture List Categories
  * Gets unique categories from lecture_list collection in order
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireInstructor } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const access = await requireInstructor(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminDb = getAdminDb();
         const snapshot = await adminDb.collection('lecture_list').get();

@@ -3,6 +3,7 @@
  * Reads the member Excel file from Firebase Storage or local file system
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -44,6 +45,8 @@ async function readMemberFile(): Promise<Buffer> {
 }
 
 export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const action = request.nextUrl.searchParams.get('action') || 'download'; // 'open', 'download', or 'read'
         
@@ -140,6 +143,8 @@ export async function GET(request: NextRequest) {
  * Saves the uploaded member Excel file to Firebase Storage and optionally local file system
  */
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File;

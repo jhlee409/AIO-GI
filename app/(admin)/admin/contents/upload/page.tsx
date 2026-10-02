@@ -11,7 +11,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '@/lib/firebase-client';
 import { useAuth } from '@/components/AuthProvider';
 import { MediaType, Category } from '@/types';
-import { Upload, FileText } from 'lucide-react';
+import { Upload } from 'lucide-react';
 
 export default function UploadPage() {
     const { user } = useAuth();

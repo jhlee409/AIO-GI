@@ -2,10 +2,13 @@
  * API Route: Get Log Files from Firebase Storage
  * Gets list of log file names from log folder in Firebase Storage
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminStorage = getAdminStorage();
         const bucket = adminStorage.bucket();

@@ -26,7 +26,7 @@
 import { useState, useCallback } from 'react';
 import { VideoUploadType, VIDEO_UPLOAD_PATHS } from '@/lib/video-upload-utils';
 import { InstructorInfo } from '@/lib/instructor-utils';
-import { recordLearningLogAttempt, trackedLearningFetch } from '@/lib/learning-session';
+import { recordLearningLogAttempt, setActiveLearningAttempt, trackedLearningFetch } from '@/lib/learning-session';
 
 export interface UserProfile {
     position: string;
@@ -158,6 +158,11 @@ export function useVideoUpload(options: UseVideoUploadOptions): UseVideoUploadRe
                 key: `log/${userProfile.position}-${userProfile.name}-${videoType.toUpperCase()}`,
                 label: `${videoType.toUpperCase()} 동영상 업로드`,
                 completedLocally: false,
+            });
+            if (user.email) setActiveLearningAttempt({
+                kind: 'log', email: user.email,
+                key: `log/${userProfile.position}-${userProfile.name}-${videoType.toUpperCase()}`,
+                label: `${videoType.toUpperCase()} 동영상 업로드`,
             });
 
             // 파일명 및 경로 생성

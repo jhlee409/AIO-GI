@@ -3,6 +3,7 @@
  * CRUD operations for lecture list data in Firestore
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 
 const LECTURE_LIST_COLLECTION = 'lecture_list';
@@ -19,7 +20,9 @@ function getDuplicateKey(item: Record<string, unknown>): string {
 }
 
 // GET: Fetch all lecture list items (중복은 한 건만 남기고 나머지 자동 삭제)
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminDb = getAdminDb();
         const snapshot = await adminDb.collection(LECTURE_LIST_COLLECTION).get();
@@ -66,6 +69,8 @@ export async function GET() {
 
 // POST: Save lecture list items (from Excel upload)
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { items } = await request.json();
 
@@ -123,6 +128,8 @@ export async function POST(request: NextRequest) {
 
 // DELETE: Delete a lecture list item
 export async function DELETE(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { itemId } = await request.json();
 

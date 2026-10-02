@@ -5,14 +5,13 @@
  */
 'use client';
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useState, useEffect, useMemo } from 'react';
 import { Upload, Send, Search, Trash2, Mail, X, Copy, Shield, UserPlus, UserMinus, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthProvider';
 import AdminUserTable from '@/components/admin/AdminUserTable';
-import ConfirmDialog from '@/components/admin/ConfirmDialog';
-import ResultDialog from '@/components/admin/ResultDialog';
 
 export default function AdminUsersPage() {
     const router = useRouter();
@@ -21,7 +20,6 @@ export default function AdminUsersPage() {
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const [authPushLoading, setAuthPushLoading] = useState(false);
-    const [showAuthDeletionConfirm, setShowAuthDeletionConfirm] = useState(false);
     const [authDeletionLoading, setAuthDeletionLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeSearchQuery, setActiveSearchQuery] = useState('');
@@ -31,7 +29,6 @@ export default function AdminUsersPage() {
     // Email feature state
     const [showEmailModal, setShowEmailModal] = useState(false);
     const [selectedEmailUsers, setSelectedEmailUsers] = useState<Set<string>>(new Set());
-    const [selectAllEmail, setSelectAllEmail] = useState(false);
     const [emailModalHospitals, setEmailModalHospitals] = useState<string[]>([]);
     const [emailModalPositions, setEmailModalPositions] = useState<string[]>([]);
     const [selectedEmailHospitals, setSelectedEmailHospitals] = useState<Set<string>>(new Set());
@@ -39,10 +36,7 @@ export default function AdminUsersPage() {
     const [selectAllEmailHospitals, setSelectAllEmailHospitals] = useState(false);
     const [selectAllEmailPositions, setSelectAllEmailPositions] = useState(false);
 
-    // Duplicate removal state
-    const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-    const [duplicateGroups, setDuplicateGroups] = useState<any[][]>([]);
-    const [duplicateLoading, setDuplicateLoading] = useState(false);
+    // Automatic duplicate cleanup status
     const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null);
 
     // Auth deletion filter state
@@ -158,7 +152,7 @@ export default function AdminUsersPage() {
     const loadUsers = async () => {
         try {
             setInitialLoading(true);
-            const response = await fetch('/api/admin/patients');
+            const response = await authenticatedFetch('/api/admin/patients');
             if (!response.ok) {
                 throw new Error('Failed to load users');
             }
@@ -211,7 +205,7 @@ export default function AdminUsersPage() {
             });
 
             // Save to Firestore
-            const response = await fetch('/api/admin/patients', {
+            const response = await authenticatedFetch('/api/admin/patients', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -344,7 +338,7 @@ export default function AdminUsersPage() {
             if (!showAuthDeletionModal) return;
 
             try {
-                const response = await fetch('/api/instructor/filter-options');
+                const response = await authenticatedFetch('/api/instructor/filter-options');
                 if (response.ok) {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -623,7 +617,7 @@ export default function AdminUsersPage() {
 
             setLoadingFilteredUsers(true);
             try {
-                const response = await fetch('/api/instructor/filtered-users', {
+                const response = await authenticatedFetch('/api/instructor/filtered-users', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -895,7 +889,7 @@ export default function AdminUsersPage() {
         setAuthDeletionLoading(true);
 
         try {
-            const response = await fetch('/api/admin/auth-deletion', {
+            const response = await authenticatedFetch('/api/admin/auth-deletion', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -905,7 +899,6 @@ export default function AdminUsersPage() {
                     positions: Array.from(selectedFilterPositions),
                     name: filterNameInput.trim(),
                     userEmails: filteredUsersForDeletion.map(u => u['이메일'] || u['email'] || u['Email'] || u['EMAIL']).filter(Boolean),
-                    requesterEmail: user?.email || '',
                 }),
             });
 
@@ -1050,7 +1043,7 @@ export default function AdminUsersPage() {
 
         try {
             const extraPositions = Array.from(selectedLogFilterPositions).filter(p => p === 'F2');
-            const response = await fetch('/api/admin/delete-logs', {
+            const response = await authenticatedFetch('/api/admin/delete-logs', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1112,7 +1105,7 @@ export default function AdminUsersPage() {
             // (including password field from filtered-users API)
             const usersToPush = filteredUsersForPush;
 
-            const response = await fetch('/api/admin/auth-push', {
+            const response = await authenticatedFetch('/api/admin/auth-push', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1242,7 +1235,7 @@ export default function AdminUsersPage() {
         setVideoDeleteLoading(true);
 
         try {
-            const response = await fetch('/api/admin/delete-submitted-videos', {
+            const response = await authenticatedFetch('/api/admin/delete-submitted-videos', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1297,7 +1290,6 @@ export default function AdminUsersPage() {
         // Default: select all users
         const allUserIds = new Set(users.map(u => u._id));
         setSelectedEmailUsers(allUserIds);
-        setSelectAllEmail(true);
     };
 
     const handleEmailUserToggle = (userId: string) => {
@@ -1368,7 +1360,7 @@ export default function AdminUsersPage() {
     const loadAdmins = async () => {
         setLoadingAdmins(true);
         try {
-            const response = await fetch('/api/admin/admins');
+            const response = await authenticatedFetch('/api/admin/admins');
             if (response.ok) {
                 const data = await response.json();
                 setAdmins(data.admins || []);
@@ -1396,7 +1388,7 @@ export default function AdminUsersPage() {
 
         setAddingAdmin(true);
         try {
-            const response = await fetch('/api/admin/admins', {
+            const response = await authenticatedFetch('/api/admin/admins', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: newAdminEmail.trim() })
@@ -1432,7 +1424,7 @@ export default function AdminUsersPage() {
 
         setRemovingAdmin(email);
         try {
-            const response = await fetch('/api/admin/admins', {
+            const response = await authenticatedFetch('/api/admin/admins', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
@@ -1505,12 +1497,12 @@ export default function AdminUsersPage() {
         }
 
         try {
-            const response = await fetch('/api/admin/patients/batch-delete', {
+            const response = await authenticatedFetch('/api/admin/patients/batch-delete', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ userIds: idsToDelete, requesterEmail: user?.email || '' }),
+                body: JSON.stringify({ userIds: idsToDelete }),
             });
 
             if (!response.ok) {
@@ -1524,110 +1516,6 @@ export default function AdminUsersPage() {
         } catch (error: any) {
             console.error('Error auto-deleting duplicates:', error);
             setDuplicateMessage(`❌ 오류 발생: ${error.message || '중복 사용자 자동 삭제 중 오류가 발생했습니다.'}`);
-        }
-    };
-
-    // Duplicate removal handlers
-    const handleFindDuplicates = () => {
-        if (users.length === 0) {
-            alert('등록된 사용자가 없습니다.');
-            return;
-        }
-
-        // Group users by Name + Hospital + Email
-        const groups: { [key: string]: any[] } = {};
-
-        users.forEach(user => {
-            const name = String(user['이름'] || user['성명'] || '').trim();
-            const hospital = String(user['병원'] || user['병원명'] || '').trim();
-            const email = String(user['이메일'] || user['email'] || user['Email'] || user['EMAIL'] || '').trim().toLowerCase();
-
-            if (!name) return; // Skip users without name
-
-            const key = `${name}|${hospital}|${email}`;
-            if (!groups[key]) {
-                groups[key] = [];
-            }
-            groups[key].push(user);
-        });
-
-        // Filter groups with more than 1 user
-        const duplicates = Object.values(groups).filter(group => group.length > 1);
-
-        if (duplicates.length === 0) {
-            alert('중복된 사용자가 없습니다.');
-            return;
-        }
-
-        // Sort each group by createdAt descending (newest first = kept)
-        duplicates.forEach(group => {
-            group.sort((a: any, b: any) => {
-                const timeA = a.createdAt?._seconds || a.createdAt?.seconds || 0;
-                const timeB = b.createdAt?._seconds || b.createdAt?.seconds || 0;
-                return timeB - timeA;
-            });
-        });
-
-        setDuplicateGroups(duplicates);
-        setShowDuplicateModal(true);
-    };
-
-    const handleDuplicateDelete = async () => {
-        if (duplicateGroups.length === 0) return;
-
-        setDuplicateLoading(true);
-
-        try {
-            // Collect IDs to delete (keep the most recent record in each group)
-            const idsToDelete: string[] = [];
-
-            duplicateGroups.forEach(group => {
-                // Sort by createdAt descending (newest first)
-                const sorted = [...group].sort((a: any, b: any) => {
-                    const timeA = a.createdAt?._seconds || a.createdAt?.seconds || 0;
-                    const timeB = b.createdAt?._seconds || b.createdAt?.seconds || 0;
-                    return timeB - timeA;
-                });
-                // Keep the first (newest) one, delete the rest
-                for (let i = 1; i < sorted.length; i++) {
-                    if (sorted[i]._id) {
-                        idsToDelete.push(sorted[i]._id);
-                    }
-                }
-            });
-
-            if (idsToDelete.length === 0) {
-                alert('삭제할 대상이 없습니다.');
-                setShowDuplicateModal(false);
-                return;
-            }
-
-            const response = await fetch('/api/admin/patients/batch-delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ userIds: idsToDelete, requesterEmail: user?.email || '' }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to delete duplicates');
-            }
-
-            const result = await response.json();
-
-            setDuplicateMessage(`✅ 중복 정리 완료: ${idsToDelete.length}명의 중복 사용자가 삭제되었습니다.`);
-
-            // Reload users
-            await loadUsers();
-
-            setShowDuplicateModal(false);
-            setDuplicateGroups([]);
-        } catch (error: any) {
-            console.error('Error deleting duplicates:', error);
-            setDuplicateMessage(`❌ 오류 발생: ${error.message || '중복 사용자 삭제 중 오류가 발생했습니다.'}`);
-        } finally {
-            setDuplicateLoading(false);
         }
     };
 
@@ -1987,81 +1875,6 @@ export default function AdminUsersPage() {
                     </div>
                 </div>
             )}
-            {/* Duplicate Result Modal */}
-            {showDuplicateModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                        <div className="p-6 border-b border-gray-200">
-                            <h2 className="text-xl font-bold text-gray-900">중복 자료 삭제</h2>
-                            <p className="text-gray-600 mt-1">
-                                총 {duplicateGroups.length}개의 중복 그룹이 발견되었습니다.
-                                <br />
-                                삭제 버튼을 누르면 각 그룹에서 1명만 남기고 나머지는 삭제됩니다.
-                            </p>
-                        </div>
-
-                        <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
-                            <div className="space-y-4">
-                                {duplicateGroups.map((group, index) => {
-                                    const user = group[0];
-                                    const name = user['이름'] || user['성명'] || '이름 없음';
-                                    const hospital = user['병원'] || user['병원명'] || '병원 없음';
-
-                                    return (
-                                        <div key={index} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <h3 className="font-bold text-gray-900">{name} ({hospital})</h3>
-                                                <span className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                                                    {group.length}건 중 {group.length - 1}건 삭제 예정
-                                                </span>
-                                            </div>
-                                            <div className="text-sm text-gray-500 pl-2 border-l-2 border-gray-200">
-                                                {group.map((u, i) => (
-                                                    <div key={i} className={`py-1 ${i === 0 ? 'text-green-600 font-medium' : 'text-gray-400 line-through'}`}>
-                                                        {i === 0 ? '✅ 유지: ' : '❌ 삭제: '}
-                                                        {u['이메일'] || u['email'] || '이메일 없음'}
-                                                        <span className="text-xs ml-2 text-gray-400">
-                                                            (등록일: {u.createdAt ? new Date(u.createdAt._seconds * 1000).toLocaleDateString() : '-'})
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        <div className="p-6 border-t border-gray-200 flex justify-end space-x-3 bg-white rounded-b-lg">
-                            <button
-                                onClick={() => setShowDuplicateModal(false)}
-                                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition"
-                                disabled={duplicateLoading}
-                            >
-                                취소
-                            </button>
-                            <button
-                                onClick={handleDuplicateDelete}
-                                disabled={duplicateLoading}
-                                className="flex items-center space-x-2 px-6 py-2 rounded-lg bg-sky-200 text-sky-900 hover:bg-sky-300 font-medium transition shadow-sm disabled:opacity-50 disabled:bg-sky-50 disabled:text-sky-300"
-                            >
-                                {duplicateLoading ? (
-                                    <>
-                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                        <span>삭제 중...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Trash2 className="w-4 h-4" />
-                                        <span>삭제</span>
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Auth Deletion Filter Modal */}
             {showAuthDeletionModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

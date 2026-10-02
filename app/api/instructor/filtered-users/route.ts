@@ -4,6 +4,7 @@
  * Excludes admin users
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminDb } from '@/lib/firebase-admin';
 
 /**
@@ -13,6 +14,8 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { isAdminEmail } from '@/lib/auth-server';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { hospitals, positions, name } = await request.json();
 

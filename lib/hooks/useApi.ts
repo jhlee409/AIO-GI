@@ -2,6 +2,7 @@
  * Generic API Hook
  * API 호출을 위한 범용 hook
  */
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useState, useCallback } from 'react';
 
 export interface UseApiOptions<T> {
@@ -27,7 +28,7 @@ export function useApi<T = any>(options: UseApiOptions<T> = {}): UseApiReturn<T>
         setError(null);
 
         try {
-            const response = await fetch(url, {
+            const response = await authenticatedFetch(url, {
                 ...requestOptions,
                 headers: {
                     'Content-Type': 'application/json',

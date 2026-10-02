@@ -12,7 +12,7 @@ const customPlayerSource = fs.readFileSync(
 
 assert.match(
   fullScreenSource,
-  /const handleClose = async \(\) =>/,
+  /const handleClose = async \(/,
   'FullScreenVideoPlayer should await watch-time save before closing'
 );
 

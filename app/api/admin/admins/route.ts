@@ -6,11 +6,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { PRIMARY_ADMIN_EMAILS, isPrimaryAdminEmail } from '@/lib/auth-server';
+import { requireAdmin } from '@/lib/api-auth';
 
 /**
  * Get all admins
  */
 export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminDb = getAdminDb();
         const adminsSnapshot = await adminDb.collection('admins').get();
@@ -37,6 +40,8 @@ export async function GET(request: NextRequest) {
  * Add a new admin
  */
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { email } = await request.json();
 
@@ -104,6 +109,8 @@ export async function POST(request: NextRequest) {
  * Remove an admin
  */
 export async function DELETE(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const { email } = await request.json();
 

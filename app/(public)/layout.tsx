@@ -6,6 +6,8 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
+import { authenticatedFetch, getCachedIdToken } from '@/lib/client-authenticated-fetch';
+import { fetchSharedUserInfo } from '@/lib/client-user-info';
 import { Home, BookOpen, LogIn, LogOut, Settings, GraduationCap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -32,6 +34,8 @@ export default function PublicLayout({
             // navigator.sendBeacon을 사용하여 더 확실하게 전송 (브라우저 종료 시에도 작동)
             const formData = new FormData();
             formData.append('email', email);
+            const idToken = getCachedIdToken();
+            if (idToken) formData.append('idToken', idToken);
 
             // sendBeacon이 실패하면 fetch with keepalive 사용
             if (!navigator.sendBeacon('/api/video/watch-time/save-on-logout', formData)) {
@@ -40,6 +44,7 @@ export default function PublicLayout({
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
                     },
                     body: JSON.stringify({ email }),
                     keepalive: true, // 페이지 언로드 후에도 요청이 완료되도록 보장
@@ -70,6 +75,7 @@ export default function PublicLayout({
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(getCachedIdToken() ? { Authorization: `Bearer ${getCachedIdToken()}` } : {}),
                     },
                     body: JSON.stringify({ email: user.email }),
                     keepalive: true,
@@ -102,7 +108,11 @@ export default function PublicLayout({
             setCheckingInstructor(true);
             try {
                 // Check instructor status
-                const instructorResponse = await fetch(`/api/user/instructor-status?email=${encodeURIComponent(user.email)}`);
+                const encodedEmail = encodeURIComponent(user.email);
+                const [instructorResponse, profileResponse] = await Promise.all([
+                    fetchSharedUserInfo(`/api/user/instructor-status?email=${encodedEmail}`),
+                    fetchSharedUserInfo(`/api/user/profile?email=${encodedEmail}`),
+                ]);
                 if (instructorResponse.ok) {
                     const contentType = instructorResponse.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -114,7 +124,6 @@ export default function PublicLayout({
                 }
 
                 // Get user position
-                const profileResponse = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
                 if (profileResponse.ok) {
                     const contentType = profileResponse.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -134,13 +143,13 @@ export default function PublicLayout({
         };
 
         checkUserInfo();
-    }, [user, authLoading]);
+    }, [user?.email, authLoading]);
 
     // 시청 시간 저장 함수 (홈 버튼과 로그아웃에서 공통 사용)
     const saveWatchTimeBeforeNavigation = async () => {
         if (user?.email) {
             try {
-                await fetch('/api/video/watch-time/save-on-logout', {
+                await authenticatedFetch('/api/video/watch-time/save-on-logout', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -161,8 +170,15 @@ export default function PublicLayout({
     };
 
     // 홈 버튼 클릭 핸들러
-    const handleHomeClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const handleHeaderNavigation = async (e: React.MouseEvent<HTMLAnchorElement>, destination: string) => {
         e.preventDefault();
+
+        const canLeave = await new Promise<boolean>(resolve => {
+            const detail = { handled: false, resolve };
+            window.dispatchEvent(new CustomEvent('requestLearningExit', { detail }));
+            if (!detail.handled) resolve(true);
+        });
+        if (!canLeave) return;
 
         // 홈으로 이동하기 전에 진행 중인 시청 시간 저장
         // 1. 먼저 커스텀 이벤트를 발생시켜 course page의 saveCurrentVideoWatchTime이 호출되도록 함
@@ -176,7 +192,7 @@ export default function PublicLayout({
         // 2. 그 다음 save-on-logout API를 호출하여 'checking' 세션을 'final'로 변환
         await saveWatchTimeBeforeNavigation();
 
-        router.push('/');
+        router.push(destination);
     };
 
     return (
@@ -185,7 +201,7 @@ export default function PublicLayout({
             <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
                 <div className="container mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
-                        <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition">
+                        <Link href="/" onClick={(e) => { void handleHeaderNavigation(e, '/'); }} className="flex items-center space-x-2 hover:opacity-80 transition">
                             <BookOpen className="w-8 h-8" />
                             <span className="text-xl font-bold">AIO-GI (GI Training Program)</span>
                         </Link>
@@ -203,6 +219,7 @@ export default function PublicLayout({
                                         !['F2', 'F2C', 'F2D', 'FCD'].includes(userPosition || '') && (
                                             <Link
                                                 href="/instructor"
+                                                onClick={(e) => { void handleHeaderNavigation(e, '/instructor'); }}
                                                 className="flex items-center space-x-1 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition"
                                             >
                                                 <GraduationCap className="w-5 h-5" />
@@ -217,6 +234,7 @@ export default function PublicLayout({
                                         !['F2', 'F2C', 'F2D', 'FCD'].includes(userPosition || '') && (
                                             <Link
                                                 href="/admin"
+                                                onClick={(e) => { void handleHeaderNavigation(e, '/admin'); }}
                                                 className="flex items-center space-x-1 bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition"
                                             >
                                                 <Settings className="w-5 h-5" />
@@ -227,7 +245,7 @@ export default function PublicLayout({
                                     {/* Home button */}
                                     <a
                                         href="/"
-                                        onClick={handleHomeClick}
+                                        onClick={(e) => { void handleHeaderNavigation(e, '/'); }}
                                         className="flex items-center space-x-1 bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition cursor-pointer"
                                     >
                                         <Home className="w-5 h-5" />

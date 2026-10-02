@@ -4,10 +4,12 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
     try {
         let email: string | null = null;
+        let idToken: string | null = null;
 
         // JSON 또는 FormData 형식 모두 지원
         const contentType = request.headers.get('content-type') || '';
@@ -15,18 +17,22 @@ export async function POST(request: NextRequest) {
         if (contentType.includes('application/json')) {
             const body = await request.json();
             email = body.email;
+            idToken = body.idToken;
         } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
             const formData = await request.formData();
             email = formData.get('email') as string;
+            idToken = formData.get('idToken') as string;
         } else {
             // 기본적으로 JSON으로 시도
             try {
                 const body = await request.json();
                 email = body.email;
+                idToken = body.idToken;
             } catch {
                 // JSON 파싱 실패 시 FormData로 시도
                 const formData = await request.formData();
                 email = formData.get('email') as string;
+                idToken = formData.get('idToken') as string;
             }
         }
 
@@ -35,6 +41,11 @@ export async function POST(request: NextRequest) {
                 { error: 'Email is required' },
                 { status: 400 }
             );
+        }
+        const access = await requireUser(request, idToken);
+        if (access instanceof NextResponse) return access;
+        if (email.toLowerCase() !== access.email.toLowerCase()) {
+            return NextResponse.json({ error: 'Watch time identity does not match the signed-in user' }, { status: 403 });
         }
 
         const adminDb = getAdminDb();

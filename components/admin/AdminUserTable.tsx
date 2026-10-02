@@ -4,6 +4,7 @@
  */
 'use client';
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useState, useMemo, useEffect } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -182,7 +183,7 @@ export default function AdminUserTable({ users, onUsersChange, currentUserEmail 
         // If user has an ID, delete from Firestore
         if (userId) {
             try {
-                const response = await fetch('/api/admin/patients', {
+                const response = await authenticatedFetch('/api/admin/patients', {
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json',
@@ -241,7 +242,7 @@ export default function AdminUserTable({ users, onUsersChange, currentUserEmail 
         // Delete from Firestore if there are IDs
         if (userIds.length > 0) {
             try {
-                const response = await fetch('/api/admin/patients/batch-delete', {
+                const response = await authenticatedFetch('/api/admin/patients/batch-delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

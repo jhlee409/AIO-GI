@@ -4,9 +4,12 @@
  * CRITICAL: Only accessible from server-side
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminAuth, getAdminRealtimeDb, getAdminDb } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminAuth = getAdminAuth();
         const realtimeDb = getAdminRealtimeDb();
@@ -141,7 +144,9 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const realtimeDb = getAdminRealtimeDb();
         const recordsRef = realtimeDb.ref('auth_deletions');

@@ -13,6 +13,11 @@
 # testing
 /coverage
 
+# python local environment and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+
 # next.js
 /.next/
 /out/

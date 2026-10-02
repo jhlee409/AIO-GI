@@ -8,7 +8,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
-import { FileUp, Users, LogOut, Home, BookOpen, Settings, GraduationCap } from 'lucide-react';
+import { authenticatedFetch, getCachedIdToken } from '@/lib/client-authenticated-fetch';
+import { LogOut, Home, BookOpen, Settings, GraduationCap } from 'lucide-react';
 
 export default function AdminLayout({
     children,
@@ -32,6 +33,8 @@ export default function AdminLayout({
             // navigator.sendBeacon을 사용하여 더 확실하게 전송 (브라우저 종료 시에도 작동)
             const formData = new FormData();
             formData.append('email', email);
+            const idToken = getCachedIdToken();
+            if (idToken) formData.append('idToken', idToken);
 
             // sendBeacon이 실패하면 fetch with keepalive 사용
             if (!navigator.sendBeacon('/api/video/watch-time/save-on-logout', formData)) {
@@ -40,6 +43,7 @@ export default function AdminLayout({
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
                     },
                     body: JSON.stringify({ email }),
                     keepalive: true, // 페이지 언로드 후에도 요청이 완료되도록 보장
@@ -70,6 +74,7 @@ export default function AdminLayout({
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(getCachedIdToken() ? { Authorization: `Bearer ${getCachedIdToken()}` } : {}),
                     },
                     body: JSON.stringify({ email: user.email }),
                     keepalive: true,
@@ -139,7 +144,7 @@ export default function AdminLayout({
     const saveWatchTimeBeforeNavigation = async () => {
         if (user?.email) {
             try {
-                await fetch('/api/video/watch-time/save-on-logout', {
+                await authenticatedFetch('/api/video/watch-time/save-on-logout', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

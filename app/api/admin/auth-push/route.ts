@@ -4,17 +4,12 @@
  * CRITICAL: Only accessible from server-side
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api-auth';
 import { getAdminAuth } from '@/lib/firebase-admin';
 
-interface UserData {
-    email?: string;
-    password?: string;
-    이메일?: string;
-    비밀번호?: string;
-    [key: string]: any;
-}
-
 export async function POST(request: NextRequest) {
+    const access = await requireAdmin(request);
+    if (access instanceof NextResponse) return access;
     try {
         const adminAuth = getAdminAuth();
         const { users } = await request.json();
