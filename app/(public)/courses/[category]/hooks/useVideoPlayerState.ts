@@ -5,6 +5,7 @@
  * videoUrl, loading, error, show 상태를 통합 관리
  */
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useState, useCallback } from 'react';
 
 export interface VideoPlayerState {
@@ -44,7 +45,7 @@ export function useVideoPlayerState(initialState?: Partial<VideoPlayerState>): U
     const loadVideo = useCallback(async (storagePath: string) => {
         setStateInternal(prev => ({ ...prev, loading: true, error: null, logCreated: false }));
         try {
-            const response = await fetch(
+            const response = await authenticatedFetch(
                 `/api/video-url?path=${encodeURIComponent(storagePath)}`
             );
             if (!response.ok) {

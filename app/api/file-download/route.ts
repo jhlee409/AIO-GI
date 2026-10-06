@@ -5,8 +5,12 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminStorage } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/api-auth';
+import { COURSE_DOWNLOAD_PATHS } from '@/lib/course-storage-access';
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const storagePath = request.nextUrl.searchParams.get('path');
         const fileName = request.nextUrl.searchParams.get('fileName') || storagePath?.split('/').pop() || 'download';
@@ -16,6 +20,10 @@ export async function GET(request: NextRequest) {
                 { error: 'Storage path is required' },
                 { status: 400 }
             );
+        }
+
+        if (!COURSE_DOWNLOAD_PATHS.has(storagePath)) {
+            return NextResponse.json({ error: 'File path is not allowed' }, { status: 403 });
         }
 
         const adminStorage = getAdminStorage();

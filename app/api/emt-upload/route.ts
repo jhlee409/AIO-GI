@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminStorage, getAdminDb } from '@/lib/firebase-admin';
 import { processEmtJob } from '@/lib/emt-processor';
 import { isAdminEmail } from '@/lib/auth-server';
+import { requireUser } from '@/lib/api-auth';
+import { getVerifiedUserProfile } from '@/lib/verified-user-profile';
 import * as os from 'os';
 import type { Bucket } from '@google-cloud/storage';
 
@@ -14,7 +16,7 @@ import type { Bucket } from '@google-cloud/storage';
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 // Handle OPTIONS request for CORS preflight
@@ -61,6 +63,8 @@ async function deleteUploadedEmtVideoIfSafe(
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     console.time('[emt-upload] Job creation');
     console.log('[emt-upload] START', { timestamp: new Date().toISOString() });
 
@@ -92,16 +96,24 @@ export async function POST(request: NextRequest) {
             videoPath,      // Firebase Storage path for video
             imageCount,     // Image count (images are not stored in Storage)
             userEmail,
-            position,
-            name,
-            hospital,
-            isAdmin: isUserAdmin = false,  // 관리자 여부 (클라이언트에서 전달)
             version = 'EMT',  // EMT 버전 (EMT 또는 EMT-L)
         } = body;
-        cleanupVideoPath = typeof videoPath === 'string' ? videoPath : undefined;
-
-        // 관리자 확인 (서버 측에서도 확인)
-        const isAdminUser = userEmail ? (await isAdminEmail(userEmail) || isUserAdmin) : isUserAdmin;
+        if (typeof userEmail !== 'string' || userEmail.toLowerCase() !== access.email.toLowerCase()) {
+            return NextResponse.json({ error: 'Upload identity does not match the signed-in user' }, { status: 403, headers: corsHeaders });
+        }
+        const profile = await getVerifiedUserProfile(access.email);
+        if (!profile?.position || !profile.name || !profile.hospital) {
+            return NextResponse.json({ error: 'User profile is incomplete' }, { status: 403, headers: corsHeaders });
+        }
+        const { position, name, hospital } = profile;
+        const isAdminUser = await isAdminEmail(access.email);
+        if (videoPath) {
+            const expectedPrefix = `Simulator_training/EMT/EMT_result/${position}-${name}-EMT-`;
+            if (typeof videoPath !== 'string' || !videoPath.startsWith(expectedPrefix) || !EMT_UPLOADED_VIDEO_PATH_PATTERN.test(videoPath)) {
+                return NextResponse.json({ error: 'Video path does not belong to the signed-in user' }, { status: 403, headers: corsHeaders });
+            }
+            cleanupVideoPath = videoPath;
+        }
 
         // Validate required fields (관리자는 videoPath 없어도 가능)
         if ((!videoPath && !isAdminUser) || imageCount === undefined || !userEmail || !position || !name || !hospital) {

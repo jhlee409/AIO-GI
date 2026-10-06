@@ -3,6 +3,10 @@
  * 사용자 확인 후 교육자들에게 이메일을 전송
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
+import { asPlainTextHtml } from '@/lib/email-content';
+import { getVerifiedUserProfile } from '@/lib/verified-user-profile';
+import { findAllInstructorsByHospital } from '@/lib/instructor-utils';
 import nodemailer from 'nodemailer';
 import { extractErrorMessage } from '@/lib/error-handler';
 
@@ -20,10 +24,17 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         console.log('[lht-send-email] Request received');
         const bodyData = await request.json();
-        const { instructors, subject, body } = bodyData;
+        const { subject, body } = bodyData;
+        const profile = await getVerifiedUserProfile(access.email);
+        if (!profile?.hospital) {
+            return NextResponse.json({ error: 'User hospital could not be verified' }, { status: 403 });
+        }
+        const instructors = await findAllInstructorsByHospital(profile.hospital);
         
         console.log('[lht-send-email] Request data:', {
             instructorsCount: instructors?.length,
@@ -37,6 +48,11 @@ export async function POST(request: NextRequest) {
                 { error: 'Instructors list is required' },
                 { status: 400 }
             );
+        }
+
+        if (typeof subject !== 'string' || typeof body !== 'string' ||
+            subject.length > 200 || body.length > 10000) {
+            return NextResponse.json({ error: 'Invalid email content' }, { status: 400 });
         }
 
         if (!subject || !body) {
@@ -71,7 +87,7 @@ export async function POST(request: NextRequest) {
                 from: process.env.GMAIL_USER,
                 subject: subject,
                 text: body,
-                html: body.replace(/\n/g, '<br>')
+                html: asPlainTextHtml(body)
             };
 
             // 교육자가 1명인 경우와 여러 명인 경우 처리

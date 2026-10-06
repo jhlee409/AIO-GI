@@ -8,6 +8,7 @@ import { trackedLearningFetch } from '@/lib/learning-session';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, X, Mic, MicOff, Volume2, Loader2, MessageSquare } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useAuth } from '@/components/AuthProvider';
 import { useCpxCaseFlow } from '@/lib/hooks/useCpxCaseFlow';
 import {
@@ -230,7 +231,7 @@ export default function CpxPage() {
                 formData.append('caseId', selectedItem);
             }
 
-            const response = await fetch('/api/cpx/transcribe', {
+            const response = await authenticatedFetch('/api/cpx/transcribe', {
                 method: 'POST',
                 body: formData,
             });
@@ -418,7 +419,7 @@ export default function CpxPage() {
             }
 
             try {
-                const response = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
+                const response = await authenticatedFetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
                 if (response.ok) {
                     const data = await response.json();
                     setUserProfile({
@@ -518,7 +519,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                 setLoadingChat(true);
 
                 try {
-                    const response = await fetch('/api/cpx/chat', {
+                    const response = await authenticatedFetch('/api/cpx/chat', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -593,7 +594,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         setLoadingScenario(true);
         try {
             const caseNumber = getCaseNumber(selectedItem);
-            const response = await fetch(`/api/cpx/docx-content?caseNumber=${caseNumber}`);
+            const response = await authenticatedFetch(`/api/cpx/docx-content?caseNumber=${caseNumber}`);
             
             if (!response.ok) {
                 throw new Error('Failed to load scenario');
@@ -642,7 +643,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         setTtsLoadingMessageIndex(messageIndex);
 
         try {
-            const response = await fetch('/api/cpx/tts', {
+            const response = await authenticatedFetch('/api/cpx/tts', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -747,7 +748,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         });
 
         try {
-            const response = await fetch('/api/cpx/chat', {
+            const response = await authenticatedFetch('/api/cpx/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -837,7 +838,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
         });
 
         try {
-            const response = await fetch('/api/cpx/chat', {
+            const response = await authenticatedFetch('/api/cpx/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

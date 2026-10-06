@@ -107,14 +107,14 @@ export default function AdminLayout({
             setCheckingInstructor(true);
             try {
                 // Check instructor status
-                const instructorResponse = await fetch(`/api/user/instructor-status?email=${encodeURIComponent(user.email)}`);
+                const instructorResponse = await authenticatedFetch(`/api/user/instructor-status?email=${encodeURIComponent(user.email)}`);
                 if (instructorResponse.ok) {
                     const data = await instructorResponse.json();
                     setIsInstructor(data.isInstructor || false);
                 }
 
                 // Get user position
-                const profileResponse = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
+                const profileResponse = await authenticatedFetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
                 if (profileResponse.ok) {
                     const contentType = profileResponse.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {

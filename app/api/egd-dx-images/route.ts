@@ -3,11 +3,17 @@
  * Gets list of image file names from EGD_Dx_training/F1 or F2/images folder in Firebase Storage
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const version = request.nextUrl.searchParams.get('version') || 'F1'; // F1 or F2
+        if (version !== 'F1' && version !== 'F2') {
+            return NextResponse.json({ error: 'Invalid version' }, { status: 400 });
+        }
         const adminStorage = getAdminStorage();
         const bucket = adminStorage.bucket();
         const [files] = await bucket.getFiles({ prefix: `EGD_Dx_training/${version}/images/` });

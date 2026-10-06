@@ -3,6 +3,7 @@
  * Handles conversation with ChatGPT for patient history taking
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { getCpxBroadQuestionOverride } from '@/lib/cpx-broad-question';
 import { getCpxChatMaxTokens } from '@/lib/cpx-chat-config';
 import { buildCpxChatSystemPrompt } from '@/lib/cpx-chat-prompt';
@@ -14,11 +15,16 @@ interface ChatMessage {
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const body = await request.json();
         const { messages, scenario } = body;
 
-        if (!messages || !Array.isArray(messages)) {
+        if (!Array.isArray(messages) || messages.length > 100 || messages.some(
+            (message: unknown) => !message || typeof message !== 'object' ||
+                !('content' in message) || typeof message.content !== 'string' || message.content.length > 10000
+        )) {
             console.error('Invalid messages:', messages);
             return NextResponse.json(
                 { error: 'Messages array is required', received: typeof messages },
@@ -26,7 +32,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (!scenario || scenario.trim() === '') {
+        if (typeof scenario !== 'string' || !scenario.trim() || scenario.length > 20000) {
             console.error('Invalid scenario:', scenario);
             return NextResponse.json(
                 { error: 'Scenario is required', received: scenario ? 'empty string' : 'undefined' },

@@ -16,7 +16,14 @@ test('simultaneous profile readers share a request without keeping stale respons
     await new Promise(resolve => setTimeout(resolve, 2));
     return new Response(JSON.stringify({ version: calls }), { headers: { 'Content-Type': 'application/json' } });
   };
-  vm.runInNewContext(compiled.outputText, { exports: moduleStub.exports, module: moduleStub, fetch });
+  vm.runInNewContext(compiled.outputText, {
+    exports: moduleStub.exports,
+    module: moduleStub,
+    require(id) {
+      if (id === '@/lib/client-authenticated-fetch') return { authenticatedFetch: fetch };
+      throw new Error(`Unexpected import: ${id}`);
+    },
+  });
   const { fetchSharedUserInfo } = moduleStub.exports;
 
   const [first, second] = await Promise.all([

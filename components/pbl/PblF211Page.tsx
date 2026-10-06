@@ -9,6 +9,7 @@ import { usePblCompletion } from '@/components/pbl/usePblCompletion';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FileText, AlertCircle, Home, LogOut, ArrowLeft } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 
@@ -115,7 +116,7 @@ function ImageDisplay({ fileName, alt, folder = 'PBL_F2_11', onImageLoad }: Imag
             try {
                 setLoading(true);
                 setError(null);
-                const response = await fetch(`/api/pbl-image-url?imageName=${encodeURIComponent(fileName)}&folder=${encodeURIComponent(folder)}`);
+                const response = await authenticatedFetch(`/api/pbl-image-url?imageName=${encodeURIComponent(fileName)}&folder=${encodeURIComponent(folder)}`);
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch image');
@@ -422,7 +423,7 @@ export function PblF211Page({ onClose }: PblF211PageProps) {
             }
 
             try {
-                const response = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
+                const response = await authenticatedFetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
                 if (response.ok) {
                     const data = await response.json();
                     setUserProfile({

@@ -17,9 +17,12 @@ TIMEZONE="Asia/Seoul"
 # 실제 도메인으로 변경하거나 환경 변수로 설정 가능
 API_URL="${CLEANUP_API_URL:-https://amcgi-bulletin.web.app/api/cleanup-emt-visualization}"
 
-# 인증 토큰 (선택사항)
-# 환경 변수 CLEANUP_SECRET_TOKEN이 설정되어 있으면 사용
+# 정리 API와 동일한 인증 토큰이 필요합니다.
 AUTH_TOKEN="${CLEANUP_SECRET_TOKEN:-}"
+if [ -z "$AUTH_TOKEN" ]; then
+    echo "CLEANUP_SECRET_TOKEN을 설정한 뒤 Cloud Scheduler 작업을 생성하세요." >&2
+    exit 1
+fi
 
 echo "=========================================="
 echo "Cloud Scheduler 작업 생성"
@@ -69,30 +72,15 @@ fi
 
 # Cloud Scheduler 작업 생성
 echo "🚀 Cloud Scheduler 작업 생성 중..."
-if [ -n "$AUTH_TOKEN" ]; then
-    # 인증 토큰이 있는 경우
-    gcloud scheduler jobs create http $JOB_NAME \
-        --location=$REGION \
-        --schedule="$SCHEDULE" \
-        --uri="$API_URL" \
-        --http-method=GET \
-        --headers="$HEADERS" \
-        --time-zone="$TIMEZONE" \
-        --description="EMT visualization files cleanup - deletes files older than 3 hours" \
-        --attempt-deadline=300s
-else
-    # 인증 토큰이 없는 경우
-    gcloud scheduler jobs create http $JOB_NAME \
-        --location=$REGION \
-        --schedule="$SCHEDULE" \
-        --uri="$API_URL" \
-        --http-method=GET \
-        --headers="$HEADERS" \
-        --time-zone="$TIMEZONE" \
-        --description="EMT visualization files cleanup - deletes files older than 3 hours" \
-        --attempt-deadline=300s \
-        --no-require-oidc
-fi
+gcloud scheduler jobs create http $JOB_NAME \
+    --location=$REGION \
+    --schedule="$SCHEDULE" \
+    --uri="$API_URL" \
+    --http-method=GET \
+    --headers="$HEADERS" \
+    --time-zone="$TIMEZONE" \
+    --description="EMT visualization files cleanup - deletes files older than 3 hours" \
+    --attempt-deadline=300s
 
 echo ""
 echo "✅ Cloud Scheduler 작업이 성공적으로 생성되었습니다!"

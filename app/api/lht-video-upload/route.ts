@@ -13,6 +13,9 @@
  * 3. 네트워크 효율성 향상 (이중 전송 제거)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
+import { getVerifiedUserProfile } from '@/lib/verified-user-profile';
+import { isVerifiedUploadedVideo } from '@/lib/verified-upload';
 import { findAllInstructorsByHospital } from '@/lib/instructor-utils';
 import { createLogFile } from '@/lib/log-utils';
 import { extractErrorMessage } from '@/lib/error-handler';
@@ -32,6 +35,8 @@ interface UploadMetadata {
 }
 
 export async function POST(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
     
@@ -70,7 +75,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { userEmail, position, name, hospital, videoUrl, fileName, fileSize, fileType } = body;
+        const { userEmail, videoUrl, fileName, fileSize, fileType } = body;
+        if (typeof userEmail !== 'string' || userEmail.toLowerCase() !== access.email.toLowerCase()) {
+            return NextResponse.json({ error: 'Upload identity does not match the signed-in user' }, { status: 403 });
+        }
+        const profile = await getVerifiedUserProfile(access.email);
+        if (!profile?.position || !profile.name || !profile.hospital) {
+            return NextResponse.json({ error: 'User profile is incomplete' }, { status: 403 });
+        }
+        const { position, name, hospital } = profile;
 
         // 필수 필드 검증
         if (!userEmail || !position || !name || !hospital || !videoUrl || !fileName) {
@@ -109,6 +122,10 @@ export async function POST(request: NextRequest) {
                 { error: 'File size must be less than 200MB' },
                 { status: 400 }
             );
+        }
+
+        if (!await isVerifiedUploadedVideo('LHT', position, name, fileName, videoUrl)) {
+            return NextResponse.json({ error: 'Uploaded video could not be verified' }, { status: 403 });
         }
 
         // 1. Find all instructors for the hospital

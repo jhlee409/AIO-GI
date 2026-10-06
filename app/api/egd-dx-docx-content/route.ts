@@ -3,14 +3,20 @@
  * Reads .docx file from Firebase Storage and converts it to text
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 import mammoth from 'mammoth';
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const imageName = request.nextUrl.searchParams.get('imageName');
         const fileNumber = request.nextUrl.searchParams.get('fileNumber'); // '1' or '2'
         const version = request.nextUrl.searchParams.get('version') || 'F1'; // F1 or F2
+        if ((version !== 'F1' && version !== 'F2') || !imageName || /[\\/\x00-\x1f]/.test(imageName) || imageName.includes('..') || (fileNumber !== '1' && fileNumber !== '2')) {
+            return NextResponse.json({ error: 'Invalid document parameters' }, { status: 400 });
+        }
         
         if (!imageName) {
             return NextResponse.json(

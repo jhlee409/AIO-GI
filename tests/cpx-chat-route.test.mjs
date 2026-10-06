@@ -11,13 +11,17 @@ const compiled = ts.transpileModule(source, {
 async function runChat(choices) {
   const requests = [];
   const moduleStub = { exports: {} };
+  class NextResponse {
+    static json(body, options = {}) { return { body, status: options.status ?? 200 }; }
+  }
   const sandbox = {
     exports: moduleStub.exports,
     module: moduleStub,
     process: { env: { OPENAI_API_KEY: 'test-key' } },
     console,
     require(id) {
-      if (id === 'next/server') return { NextResponse: { json: (body, options = {}) => ({ body, status: options.status ?? 200 }) } };
+      if (id === 'next/server') return { NextResponse };
+      if (id === '@/lib/api-auth') return { requireUser: async () => ({ email: 'learner@example.com' }) };
       if (id === '@/lib/cpx-broad-question') return { getCpxBroadQuestionOverride: () => null };
       if (id === '@/lib/cpx-chat-config') return { getCpxChatMaxTokens: () => 2048 };
       if (id === '@/lib/cpx-chat-prompt') return { buildCpxChatSystemPrompt: () => 'scenario prompt' };

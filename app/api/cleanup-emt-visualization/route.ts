@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
         const authHeader = request.headers.get('authorization');
         const secretToken = process.env.CLEANUP_SECRET_TOKEN;
         
-        // If secret token is set, require it
-        if (secretToken && authHeader !== `Bearer ${secretToken}`) {
+        // Never run a destructive cleanup when its shared secret is missing.
+        if (!secretToken || authHeader !== `Bearer ${secretToken}`) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
                 { status: 401, headers: corsHeaders }

@@ -2,6 +2,7 @@
  * API Route: CPX patient text-to-speech
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { getStructuredCpxScenario } from '@/lib/cpx-scenario-registry';
 import {
     buildCpxTtsRequestBody,
@@ -10,6 +11,8 @@ import {
 } from '@/lib/cpx-tts';
 
 export async function POST(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) {
@@ -30,7 +33,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (!text) {
+        if (!text || text.length > 2000) {
             return NextResponse.json(
                 { error: 'Text is required' },
                 { status: 400 }

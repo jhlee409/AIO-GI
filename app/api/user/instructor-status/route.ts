@@ -4,8 +4,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         // Firebase Admin SDK 초기화 (lazy initialization)
         const adminDb = getAdminDb();
@@ -17,6 +20,9 @@ export async function GET(request: NextRequest) {
                 { error: 'Email is required' },
                 { status: 400 }
             );
+        }
+        if (email.toLowerCase() !== access.email.toLowerCase()) {
+            return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
         }
 
         // Search for user in users collection by email (fallback to patients for backward compatibility)

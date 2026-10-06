@@ -9,6 +9,7 @@ import { clearActiveLearningAttempt, getActiveLearningAttempt, getLearningAttemp
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Download, Upload, Video, FileText, Music, X, Trash2 } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { useAuth } from '@/components/AuthProvider';
 import { convertBmpToJpg, isBmpFile } from '@/lib/image-converter';
 import { useVideoUpload } from '@/lib/hooks/useVideoUpload';
@@ -729,7 +730,7 @@ export default function CoursePage() {
                 isAdmin: isUserAdmin
             });
 
-            const response = await fetch('/api/emt-upload', {
+            const response = await authenticatedFetch('/api/emt-upload', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -793,7 +794,7 @@ export default function CoursePage() {
                     attempts++;
 
                     try {
-                        const statusResponse = await fetch(`/api/emt-job-status?jobId=${encodeURIComponent(jobId)}`);
+                        const statusResponse = await authenticatedFetch(`/api/emt-job-status?jobId=${encodeURIComponent(jobId)}`);
 
                         if (!statusResponse.ok) {
                             let msg = `상태 확인 실패: HTTP ${statusResponse.status}`;
@@ -1062,7 +1063,7 @@ export default function CoursePage() {
 
                                         // EMT/EMT-L 합격 시 해당 병원의 교육자에게 자동으로 성공 메일 전송
                                         try {
-                                            const response = await fetch('/api/emt-send-email', {
+                                            const response = await authenticatedFetch('/api/emt-send-email', {
                                                 method: 'POST',
                                                 headers: {
                                                     'Content-Type': 'application/json',
@@ -1316,7 +1317,7 @@ export default function CoursePage() {
             if (userConfirmed) {
                 // 서버에서 이메일 전송
                 try {
-                    const response = await fetch('/api/sht-send-email', {
+                    const response = await authenticatedFetch('/api/sht-send-email', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1451,7 +1452,7 @@ export default function CoursePage() {
             if (userConfirmed) {
                 // 서버에서 이메일 전송
                 try {
-                    const response = await fetch('/api/lht-send-email', {
+                    const response = await authenticatedFetch('/api/lht-send-email', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1586,7 +1587,7 @@ export default function CoursePage() {
             if (userConfirmed) {
                 // 서버에서 이메일 전송
                 try {
-                    const response = await fetch('/api/mt-send-email', {
+                    const response = await authenticatedFetch('/api/mt-send-email', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1863,7 +1864,7 @@ export default function CoursePage() {
                 setLoadingEgdDxImages(true);
                 setEgdDxImagesError(null);
                 try {
-                    const response = await fetch('/api/egd-dx-images?version=F1');
+                    const response = await authenticatedFetch('/api/egd-dx-images?version=F1');
                     if (!response.ok) {
                         throw new Error('이미지 목록을 불러오는 중 오류가 발생했습니다.');
                     }
@@ -1891,7 +1892,7 @@ export default function CoursePage() {
                 setLoadingEgdDxImagesF2(true);
                 setEgdDxImagesErrorF2(null);
                 try {
-                    const response = await fetch('/api/egd-dx-images?version=F2');
+                    const response = await authenticatedFetch('/api/egd-dx-images?version=F2');
                     if (!response.ok) {
                         throw new Error('이미지 목록을 불러오는 중 오류가 발생했습니다.');
                     }
@@ -1922,7 +1923,7 @@ export default function CoursePage() {
             }
 
             try {
-                const response = await fetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
+                const response = await authenticatedFetch(`/api/user/profile?email=${encodeURIComponent(user.email)}`);
                 if (response.ok) {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
@@ -2314,7 +2315,7 @@ export default function CoursePage() {
                                                             setVideoError(null);
                                                             setLogCreated(false);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/Sim/simulation_center_orientation.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -2404,7 +2405,7 @@ export default function CoursePage() {
                                                                 const fileName = 'EGD 시행 동작 순서 Bx 포함 2024.docx';
 
                                                                 // Use file-download API to stream file directly
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/file-download?path=${encodeURIComponent(storagePath)}&fileName=${encodeURIComponent(fileName)}`
                                                                 );
 
@@ -2462,7 +2463,7 @@ export default function CoursePage() {
                                                                 const fileName = 'memory test narration 13분.mp3';
 
                                                                 // Use file-download API to stream file directly
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/file-download?path=${encodeURIComponent(storagePath)}&fileName=${encodeURIComponent(fileName)}`
                                                                 );
 
@@ -2516,7 +2517,7 @@ export default function CoursePage() {
                                                             setLoadingMtDemo(true);
                                                             setMtDemoError(null);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/MT/MT_demo.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -2719,7 +2720,7 @@ export default function CoursePage() {
                                                             setLoadingShtOrientation(true);
                                                             setShtOrientationError(null);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/SHT/SHT_orientation.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -2768,7 +2769,7 @@ export default function CoursePage() {
                                                             setLoadingShtExpertDemo(true);
                                                             setShtExpertDemoError(null);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/SHT/SHT_expert_demo.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -2970,7 +2971,7 @@ export default function CoursePage() {
                                                             setLoadingEmtOrientation(true);
                                                             setEmtOrientationError(null);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/EMT/EMT_orientation.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -3025,7 +3026,7 @@ export default function CoursePage() {
                                                                 setLoadingEmtExemplary(true);
                                                                 setEmtExemplaryError(null);
                                                                 try {
-                                                                    const response = await fetch(
+                                                                    const response = await authenticatedFetch(
                                                                         `/api/video-url?path=${encodeURIComponent('Simulator_training/EMT/EMT_expert_demo.mp4')}`
                                                                     );
                                                                     if (!response.ok) {
@@ -3062,7 +3063,7 @@ export default function CoursePage() {
                                                                 setLoadingEmtLExemplary(true);
                                                                 setEmtLExemplaryError(null);
                                                                 try {
-                                                                    const response = await fetch(
+                                                                    const response = await authenticatedFetch(
                                                                         `/api/video-url?path=${encodeURIComponent('Simulator_training/EMT/EMT-L_expert_demo.mp4')}`
                                                                     );
                                                                     if (!response.ok) {
@@ -3390,7 +3391,7 @@ export default function CoursePage() {
                                                                 try {
                                                                     const videoFileName = `${lecture}.mp4`;
                                                                     const storagePath = `Lectures/${videoFileName}`;
-                                                                    const response = await fetch(
+                                                                    const response = await authenticatedFetch(
                                                                         `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                     );
                                                                     if (!response.ok) {
@@ -3505,7 +3506,7 @@ export default function CoursePage() {
                                                                     // 강의 이름을 파일명으로 사용 (예: "Bx.? or not?" -> "Bx_or_no_Bx.mp4")
                                                                     const videoFileName = lecture === 'Bx.? or not?' ? 'Bx_or_no_Bx.mp4' : `${lecture}.mp4`;
                                                                     const storagePath = `Lectures/${videoFileName}`;
-                                                                    const response = await fetch(
+                                                                    const response = await authenticatedFetch(
                                                                         `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                     );
                                                                     if (!response.ok) {
@@ -3619,7 +3620,7 @@ export default function CoursePage() {
                                                             setLoadingLhtOrientation(true);
                                                             setLhtOrientationError(null);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/LHT/LHT_orientation.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -3668,7 +3669,7 @@ export default function CoursePage() {
                                                             setLoadingLhtExpertDemo(true);
                                                             setLhtExpertDemoError(null);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/LHT/LHT_expert_demo.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -3898,7 +3899,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'hemoclip_orientation.mp4';
                                                                 const storagePath = `Simulator_training/Hemoclip/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4054,7 +4055,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'Injection_orientation.mp4';
                                                                 const storagePath = `Simulator_training/Injection/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4207,7 +4208,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'APC_orientation.mp4';
                                                                 const storagePath = `Simulator_training/APC/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4357,7 +4358,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'Nexpowder 사용법과 cases.mp4';
                                                                 const storagePath = `Simulator_training/NexPowder/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4504,7 +4505,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'EVL_orientation.mp4';
                                                                 const storagePath = `Simulator_training/EVL/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4644,7 +4645,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'PEG_orientation.mp4';
                                                                 const storagePath = `Simulator_training/PEG/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4786,7 +4787,7 @@ export default function CoursePage() {
                                                             });
                                                             try {
                                                                 const storagePath = 'EGD_Hemostasis_training/lecture/Fundamentals_of_NVUGIB_Management.mp4';
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -4871,7 +4872,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = 'NVUGIB_overview.mp4';
                                                                 const storagePath = `EGD_Hemostasis_training/lecture/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -5001,7 +5002,7 @@ export default function CoursePage() {
                                                                 try {
                                                                     const videoFileName = `${caseItem}.mp4`;
                                                                     const storagePath = `EGD_Hemostasis_training/cases/${videoFileName}`;
-                                                                    const response = await fetch(
+                                                                    const response = await authenticatedFetch(
                                                                         `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                     );
                                                                     if (!response.ok) {
@@ -5130,7 +5131,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = `${lectureName}.mp4`;
                                                                 const storagePath = `Lectures/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -5201,7 +5202,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = `${lectureName}.mp4`;
                                                                 const storagePath = `Lectures/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -5272,7 +5273,7 @@ export default function CoursePage() {
                                                             try {
                                                                 const videoFileName = `${lectureName}.mp4`;
                                                                 const storagePath = `Lectures/${videoFileName}`;
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                 );
                                                                 if (!response.ok) {
@@ -5534,7 +5535,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                                     // Load image
                                                                     try {
-                                                                        const response = await fetch(`/api/egd-dx-image-url?imageName=${encodeURIComponent(imageName)}&version=F1`);
+                                                                        const response = await authenticatedFetch(`/api/egd-dx-image-url?imageName=${encodeURIComponent(imageName)}&version=F1`);
                                                                         if (!response.ok) {
                                                                             const contentType = response.headers.get('content-type');
                                                                             if (contentType && contentType.includes('application/json')) {
@@ -5559,7 +5560,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                                     // Load instruction 1
                                                                     try {
-                                                                        const response1 = await fetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=1&version=F1`);
+                                                                        const response1 = await authenticatedFetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=1&version=F1`);
                                                                         if (response1.ok) {
                                                                             const contentType = response1.headers.get('content-type');
                                                                             if (contentType && contentType.includes('application/json')) {
@@ -5581,7 +5582,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                                     // Load instruction 2
                                                                     try {
-                                                                        const response2 = await fetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=2&version=F1`);
+                                                                        const response2 = await authenticatedFetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=2&version=F1`);
                                                                         if (response2.ok) {
                                                                             const contentType = response2.headers.get('content-type');
                                                                             if (contentType && contentType.includes('application/json')) {
@@ -5847,7 +5848,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                                     // Load image
                                                                     try {
-                                                                        const response = await fetch(`/api/egd-dx-image-url?imageName=${encodeURIComponent(imageName)}&version=F2`);
+                                                                        const response = await authenticatedFetch(`/api/egd-dx-image-url?imageName=${encodeURIComponent(imageName)}&version=F2`);
                                                                         if (!response.ok) {
                                                                             const contentType = response.headers.get('content-type');
                                                                             if (contentType && contentType.includes('application/json')) {
@@ -5872,7 +5873,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                                     // Load instruction 1
                                                                     try {
-                                                                        const response1 = await fetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=1&version=F2`);
+                                                                        const response1 = await authenticatedFetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=1&version=F2`);
                                                                         if (response1.ok) {
                                                                             const contentType = response1.headers.get('content-type');
                                                                             if (contentType && contentType.includes('application/json')) {
@@ -5893,7 +5894,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
 
                                                                     // Load instruction 2
                                                                     try {
-                                                                        const response2 = await fetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=2&version=F2`);
+                                                                        const response2 = await authenticatedFetch(`/api/egd-dx-docx-content?imageName=${encodeURIComponent(imageName)}&fileNumber=2&version=F2`);
                                                                         if (response2.ok) {
                                                                             const contentType = response2.headers.get('content-type');
                                                                             if (contentType && contentType.includes('application/json')) {
@@ -6129,7 +6130,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                             setStentEsoGeJunctionError(null);
                                                             setStentEsoGeJunctionLogCreated(false);
                                                             try {
-                                                                const response = await fetch(
+                                                                const response = await authenticatedFetch(
                                                                     `/api/video-url?path=${encodeURIComponent('Simulator_training/Stent/Stent_Eso_GEjunction_lecture.mp4')}`
                                                                 );
                                                                 if (!response.ok) {
@@ -6330,7 +6331,7 @@ Date: ${new Date().toLocaleString('ko-KR')}`;
                                                                                 try {
                                                                                     const videoFileName = `${code}.mp4`;
                                                                                     const storagePath = `EGD_variation/${videoFileName}`;
-                                                                                    const response = await fetch(
+                                                                                    const response = await authenticatedFetch(
                                                                                         `/api/video-url?path=${encodeURIComponent(storagePath)}`
                                                                                     );
                                                                                     if (!response.ok) {

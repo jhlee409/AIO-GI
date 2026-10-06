@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase-client';
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 import { LogIn } from 'lucide-react';
 
 export default function LoginPage() {
@@ -84,7 +85,7 @@ export default function LoginPage() {
                 // Get hostname (browser hostname, not computer name)
                 const hostname = typeof window !== 'undefined' ? window.location.hostname : 'Unknown';
 
-                const sessionResponse = await fetch('/api/user/session', {
+                const sessionResponse = await authenticatedFetch('/api/user/session', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

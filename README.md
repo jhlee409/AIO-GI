@@ -55,7 +55,7 @@ ADC를 사용하는 경우 `.env.local`에 복사된 서버 인증 변수 3개�
 | `CPX_STT_MODEL`, `CPX_TTS_MODEL`, `CPX_TTS_VOICE` | CPX 음성 옵션 |
 | `EMT_ANALYSIS_SERVICE_URL` | EMT/EMT-L Python 분석 서비스 기본 URL |
 | `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ADMIN_EMAIL` | 이메일 전송 및 삭제 알림 수신 주소 |
-| `CLEANUP_SECRET_TOKEN` | EMT 시각화 정리 API의 Bearer 토큰 |
+| `CLEANUP_SECRET_TOKEN` | EMT 시각화 정리 API와 Cloud Scheduler에 필수인 동일한 Bearer 토큰 |
 
 CPX 채팅 모델은 현재 `app/api/cpx/chat/route.ts`에서 `gpt-6-luna`로 지정합니다. `EMT_ANALYSIS_SERVICE_URL`을 설정하지 않으면 `lib/emt-analysis.ts`의 기본 서비스 URL을 사용합니다.
 

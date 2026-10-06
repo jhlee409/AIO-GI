@@ -4,6 +4,7 @@
  * 비디오 URL 로딩 로직을 통합 관리하는 유틸리티
  */
 
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 export interface LoadVideoOptions {
     storagePath: string;
     onSuccess?: (url: string) => void;
@@ -14,7 +15,7 @@ export async function loadVideoUrl(options: LoadVideoOptions): Promise<string | 
     const { storagePath, onSuccess, onError } = options;
     
     try {
-        const response = await fetch(
+        const response = await authenticatedFetch(
             `/api/video-url?path=${encodeURIComponent(storagePath)}`
         );
         

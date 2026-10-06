@@ -3,16 +3,19 @@
  * Reads .docx file from Firebase Storage and converts it to text
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 import { getStructuredCpxScenario } from '@/lib/cpx-scenario-registry';
 import { formatStructuredCpxScenario } from '@/lib/cpx-structured-scenario';
 import mammoth from 'mammoth';
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const caseNumber = request.nextUrl.searchParams.get('caseNumber');
         
-        if (!caseNumber) {
+        if (!caseNumber || !/^\d{1,2}$/.test(caseNumber)) {
             return NextResponse.json(
                 { error: 'Case number is required' },
                 { status: 400 }

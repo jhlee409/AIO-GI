@@ -1,12 +1,14 @@
 // Share simultaneous profile/status reads across the layout and page hooks.
 // A settled request is removed immediately so account edits are never served
 // from a stale client cache.
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
+
 const pendingRequests = new Map<string, Promise<Response>>();
 
 export async function fetchSharedUserInfo(url: string): Promise<Response> {
     let request = pendingRequests.get(url);
     if (!request) {
-        request = fetch(url);
+        request = authenticatedFetch(url);
         const activeRequest = request;
         pendingRequests.set(url, activeRequest);
         void activeRequest.then(

@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/client-authenticated-fetch';
 
 export default function EgdLesionDxImagePage() {
     const params = useParams();
@@ -27,7 +28,7 @@ export default function EgdLesionDxImagePage() {
 
             try {
                 const decodedImageName = decodeURIComponent(imageName);
-                const response = await fetch(`/api/egd-dx-image-url?imageName=${encodeURIComponent(decodedImageName)}`);
+                const response = await authenticatedFetch(`/api/egd-dx-image-url?imageName=${encodeURIComponent(decodedImageName)}`);
 
                 if (!response.ok) {
                     const data = await response.json();

@@ -2,6 +2,7 @@
  * API Route: CPX speech-to-text transcription
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import {
     buildCpxSttPrompt,
     getCpxSttModel,
@@ -13,6 +14,8 @@ import { getStructuredCpxScenario } from '@/lib/cpx-scenario-registry';
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) {

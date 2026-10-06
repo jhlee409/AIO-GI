@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { v4 as uuidv4 } from 'uuid';
+import { requireUser } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,11 +20,23 @@ export async function POST(request: NextRequest) {
         }
         const { email, action, sessionId, hostname } = body;
 
-        if (!email) {
+        if (typeof email !== 'string' || !email.trim()) {
             return NextResponse.json(
                 { error: 'Email is required' },
                 { status: 400 }
             );
+        }
+        if (sessionId && (typeof sessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(sessionId))) {
+            return NextResponse.json({ error: 'Invalid session ID' }, { status: 400 });
+        }
+        // A session ID is an unguessable capability for its own update/logout.
+        // Creating a session or deleting every session requires Firebase identity.
+        if (action === 'create' || !sessionId) {
+            const access = await requireUser(request);
+            if (access instanceof NextResponse) return access;
+            if (email.toLowerCase() !== access.email.toLowerCase()) {
+                return NextResponse.json({ error: 'Session identity does not match the signed-in user' }, { status: 403 });
+            }
         }
 
         const adminDb = getAdminDb();

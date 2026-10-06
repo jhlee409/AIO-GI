@@ -4,12 +4,13 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/api-auth';
 
 // CORS headers for external access
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 // Handle OPTIONS request for CORS preflight
@@ -25,6 +26,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
     
@@ -47,6 +50,9 @@ export async function GET(request: NextRequest) {
         }
         
         const jobData = jobDoc.data();
+        if (String(jobData?.userEmail || '').toLowerCase() !== access.email.toLowerCase()) {
+            return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403, headers: corsHeaders });
+        }
         
         return NextResponse.json({
             jobId,

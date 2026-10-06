@@ -3,12 +3,18 @@
  * Gets the download URL for a specific PBL image file
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/api-auth';
 import { getAdminStorage } from '@/lib/firebase-admin';
 
 export async function GET(request: NextRequest) {
+    const access = await requireUser(request);
+    if (access instanceof NextResponse) return access;
     try {
         const imageName = request.nextUrl.searchParams.get('imageName');
         const folder = request.nextUrl.searchParams.get('folder') || 'PBL_F2_01';
+        if (!/^PBL_F2_(?:0[1-9]|1[0-4])$/.test(folder) || !imageName || /[\\/\x00-\x1f]/.test(imageName) || imageName.includes('..')) {
+            return NextResponse.json({ error: 'Invalid image name or folder' }, { status: 400 });
+        }
         
         if (!imageName) {
             return NextResponse.json(
@@ -80,25 +86,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Get signed URL (valid for 1 hour)
-        let url: string;
-        try {
-            const [signedUrl] = await foundFile.getSignedUrl({
-                action: 'read',
-                expires: Date.now() + 3600 * 1000, // 1 hour
-            });
-            url = signedUrl;
-        } catch (signedUrlError: any) {
-            console.error('Error generating signed URL:', signedUrlError);
-            // Fallback: try to make file public and use public URL
-            try {
-                await foundFile.makePublic();
-                url = `https://storage.googleapis.com/${bucket.name}/${foundFile.name}`;
-                console.log('Using public URL as fallback');
-            } catch (publicError: any) {
-                console.error('Error making file public:', publicError);
-                throw new Error(`Failed to generate image URL: ${signedUrlError.message}`);
-            }
-        }
+        // Signing failure must not make training images public.
+        const [url] = await foundFile.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 3600 * 1000,
+        });
 
         return NextResponse.json({ url }, { headers: { 'Cache-Control': 'private, max-age=300' } });
     } catch (error: any) {
